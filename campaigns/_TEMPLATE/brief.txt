@@ -1,0 +1,12 @@
+HOW TO ADD A CAMPAIGN
+1. Copy this whole _TEMPLATE folder and rename the copy to the campaign name,
+   e.g.  campaigns/Clix_Pool   (folders starting with _ are ignored)
+2. Replace this text with the campaign's FULL brief: copy everything from the
+   Whop/Vyro campaign page (rules, requirements, links, hashtags) and paste it here.
+   You can also save it as brief.pdf or brief.docx instead.
+3. Optional materials:
+   materials/logo.png    - a logo the campaign wants on every clip
+   materials/footage/    - videos the campaign gives you to clip (trailers, gameplay)
+   materials/examples/   - example clips they like (AutoClipper matches their length)
+4. Easier: use the app (Campaigns tab). It shows what AutoClipper understood and writes
+   campaign.yaml, which you can open in Notepad and correct.

@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+clips/
+temp/
+state.json
+posted.json
+doctor_report.txt
+app_error.txt
+youtube_token.json
+client_secret.json
+campaigns/*
+!campaigns/_TEMPLATE/
+!campaigns/_TEMPLATE/**

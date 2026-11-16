@@ -1,0 +1,8 @@
+yt-dlp
+pyyaml
+numpy
+faster-whisper
+chat-downloader
+opencv-python-headless<5
+pypdf
+flask

@@ -1,0 +1,67 @@
+# ============================================================
+#  AutoClipper settings — edit this file, then run start.bat
+# ============================================================
+
+# ---- Campaigns (recommended) ----
+# Put each campaign in its own folder inside "campaigns" with its brief + materials.
+# See campaigns/_TEMPLATE/brief.txt. Each campaign follows its own brief.
+campaigns_folder: "campaigns"
+
+# ---- Extra streamers with no campaign (optional) ----
+# Leave empty if you use campaign folders.
+channels: []
+#  - name: "StreamerOne"
+#    url: "https://www.twitch.tv/streamerone/videos?filter=archives"
+#    hashtags: "#streamerone"
+#    facecam: auto
+
+# ---- App ----
+auto_start_engine: true     # start clipping as soon as the app opens
+phone_access: false         # true = open the app from your phone on the same Wi-Fi
+
+# ---- Updates (new versions install themselves) ----
+auto_update: true
+update_repo: "krankyclips-source/autoclipper"
+update_branch: "main"
+
+# How often to check for new streams (minutes)
+check_every_minutes: 30
+latest_vods_to_check: 2
+
+# ---- How many clips per stream ----
+# Longer streams give more clips: a 4-hour stream x 3 per hour = 12 clips.
+clips_per_hour: 3
+min_clips_per_stream: 3
+max_clips_per_stream: 12
+
+# ---- Clip shape ----
+# Short wins: 11–20s Shorts get the most median views. Build-up + payoff + reaction.
+clip_before_peak: 12        # seconds kept before the hype moment (the build-up)
+clip_after_peak: 6          # seconds kept after it (the reaction) — end right after the payoff
+min_gap_between_clips: 90   # seconds; stops two clips showing the same moment
+use_chat: true              # also use chat spam to find moments (Twitch/YouTube)
+
+# ---- Look ----
+captions: true              # burn auto-captions onto the video
+hook_on_video: true         # yellow title bar with the hook for the first 3 seconds
+cold_open: true             # flash the payoff for 1.4s first, then the build-up ("wait for it")
+zoom_on_peak: true          # quick punch-in zoom on the hype moment
+whisper_model: "small"      # tiny / base / small ("small" suits a GTX 1660 Super)
+
+# ---- Campaign disclosure (required by Content Rewards/Whop campaigns) ----
+# Adds a "Paid partnership" tag on screen for the first seconds, and puts
+# #ad at the START of every caption. A channel can override it, e.g.
+#   disclosure: false      or      disclosure: {caption_tag: "#sponsored"}
+disclosure:
+  enabled: true
+  on_screen_text: "Paid partnership"
+  caption_tag: "#ad"
+  seconds: 3
+
+# Where the ready-to-post clips go.
+# Tip: point this at your Google Drive folder (e.g. "G:/My Drive/Clips")
+# to grab clips straight from your phone.
+output_folder: "clips"
+
+# Delete downloaded stream audio after clipping (saves disk space)
+cleanup_sources: true

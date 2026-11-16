@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoClipper</title>
+<style>
+:root{--bg:#0d0f13;--panel:#151821;--panel2:#1c2030;--line:#262b38;--text:#e9eaee;--mute:#9399a8;
+--acc:#ffd400;--ok:#4ad07a;--bad:#ff5d5d;--blue:#4a8dff;--r:12px}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);
+font:14px/1.45 "Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+a{color:inherit}
+.app{display:grid;grid-template-columns:210px 1fr;min-height:100vh}
+nav{background:#0a0c10;border-right:1px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh}
+.brand{font-weight:800;font-size:18px;letter-spacing:.3px;padding:4px 10px 18px;display:flex;gap:8px;align-items:center}
+.brand i{width:26px;height:26px;border-radius:7px;background:var(--acc);display:inline-grid;place-items:center;color:#000;font-style:normal;font-size:15px}
+nav button{display:flex;width:100%;gap:10px;align-items:center;background:none;border:0;color:var(--mute);
+padding:10px 12px;border-radius:9px;font-size:14px;cursor:pointer;text-align:left}
+nav button:hover{background:var(--panel)}nav button.on{background:var(--panel2);color:var(--text);font-weight:600}
+nav .badge{margin-left:auto;background:var(--acc);color:#000;border-radius:20px;font-size:11px;padding:1px 7px;font-weight:700}
+.navfoot{position:absolute;bottom:16px;left:12px;right:12px;font-size:12px;color:var(--mute);padding:0 10px}
+main{padding:24px 28px;max-width:1400px}
+h1{font-size:22px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 20px}
+h2{font-size:15px;margin:0 0 12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:600}
+.btn:hover{border-color:#3a4256}.btn.pri{background:var(--acc);color:#000;border-color:var(--acc)}
+.btn.red{background:#3a1d22;border-color:#5a2a31;color:#ffb3b3}.btn.green{background:#173823;border-color:#24563a;color:#9ff0bd}
+.btn.sm{padding:5px 9px;font-size:12px}.btn:disabled{opacity:.5;cursor:default}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.tile .k{color:var(--mute);font-size:12px}.tile .v{font-size:26px;font-weight:800;margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:7px;border-radius:20px;padding:5px 12px;font-weight:700;font-size:13px;background:var(--panel2)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mute)}
+.pill.working .dot{background:var(--acc);animation:pulse 1s infinite}.pill.idle .dot{background:var(--ok)}
+.pill.stopped .dot{background:var(--bad)}@keyframes pulse{50%{opacity:.3}}
+.log{background:#07080b;border:1px solid var(--line);border-radius:10px;height:300px;overflow:auto;
+font:12px/1.5 Consolas,ui-monospace,monospace;padding:10px;white-space:pre-wrap;color:#c5cad6}
+.log .w{color:#ffb86b}.log .e{color:var(--bad)}.log .g{color:var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:8px}
+.card.posted{opacity:.5}
+.media{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.media video,.media img{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:9px;background:#000}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:2px 7px;background:var(--acc);color:#000}
+.tag.gray{background:var(--panel2);color:var(--mute)}
+.hook{font-weight:700;font-size:15px}.meta{font-size:12px;color:var(--mute)}
+.chk{font-size:12px}.chk.ok{color:var(--ok)}.chk.bad{color:var(--bad);font-weight:700}
+details{font-size:12px;color:#cfd3dc}details summary{cursor:pointer;color:var(--mute)}details li{margin:3px 0}
+input[type=text],input[type=number],select,textarea{width:100%;background:#0b0d12;color:var(--text);border:1px solid var(--line);
+border-radius:9px;padding:9px 11px;font:inherit}
+textarea{min-height:160px;resize:vertical;font-family:Consolas,ui-monospace,monospace;font-size:12.5px}
+label.f{display:block;font-size:12px;color:var(--mute);margin:12px 0 5px;font-weight:600}
+.two{display:grid;grid-template-columns:320px 1fr;gap:16px}
+.clist .ci{padding:11px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--panel)}
+.clist .ci.on{border-color:var(--acc)}.clist .ci .n{font-weight:700}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;font-size:13px}.kv div:nth-child(odd){color:var(--mute)}
+.files span{display:inline-flex;gap:6px;align-items:center;background:var(--panel2);border-radius:7px;padding:3px 8px;margin:3px;font-size:12px}
+.files b{cursor:pointer;color:var(--bad)}
+.toggle{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.toggle:last-child{border:0}.toggle small{color:var(--mute);display:block;font-size:12px}
+.sw{position:relative;width:42px;height:24px;flex:none}.sw input{display:none}
+.sw span{position:absolute;inset:0;background:#33394a;border-radius:20px;cursor:pointer;transition:.2s}
+.sw span:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.sw input:checked+span{background:var(--ok)}.sw input:checked+span:before{transform:translateX(18px)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--acc);color:#000;padding:9px 16px;
+border-radius:9px;font-weight:700;display:none;z-index:9}
+.empty{color:var(--mute);text-align:center;padding:40px}
+.steps li{margin:6px 0}.hint{font-size:12px;color:var(--mute)}
+.hidden{display:none!important}
+@media(max-width:900px){.app{grid-template-columns:1fr}nav{position:static;height:auto;display:flex;flex-wrap:wrap;gap:4px}
+nav button{width:auto}.navfoot,.brand{display:none}.tiles{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}main{padding:16px}}
+</style></head>
+<body><div class="app">
+<nav>
+  <div class="brand"><i>▶</i>AutoClipper</div>
+  <button data-tab="dash" class="on">📊 Dashboard</button>
+  <button data-tab="clips">🎬 Clips <span class="badge" id="nReady">0</span></button>
+  <button data-tab="camps">📋 Campaigns</button>
+  <button data-tab="test">🧪 Test a video</button>
+  <button data-tab="settings">⚙️ Settings</button>
+  <div class="navfoot" id="navState">…</div>
+</nav>
+<main>
+
+<!-- DASHBOARD -->
+<section id="dash">
+  <h1>Dashboard</h1><p class="sub">AutoClipper watches your campaigns and turns new streams into ready-to-post clips.</p>
+  <div class="panel row" style="justify-content:space-between">
+    <div class="row"><span class="pill" id="pill"><span class="dot"></span><span id="pillText">…</span></span>
+      <span class="meta" id="busy"></span></div>
+    <div class="row">
+      <button class="btn green" id="bStart">▶ Start</button>
+      <button class="btn red" id="bStop">■ Stop</button>
+      <button class="btn" id="bCheck">↻ Check now</button>
+    </div>
+  </div>
+  <div class="tiles">
+    <div class="tile"><div class="k">Ready to post</div><div class="v" id="tReady">–</div></div>
+    <div class="tile"><div class="k">Posted</div><div class="v" id="tPosted">–</div></div>
+    <div class="tile"><div class="k">Campaigns</div><div class="v" id="tCamps">–</div></div>
+    <div class="tile"><div class="k">Next check</div><div class="v" id="tNext" style="font-size:20px">–</div></div>
+  </div>
+  <div class="panel hidden" id="updBox" style="border-color:#5a4a10;background:#231f0d"><div class="row" style="justify-content:space-between">
+    <div>⬆ <b>New version available</b> <span id="updVer" class="meta"></span></div>
+    <button class="btn pri sm" id="bUpdNow">Update now</button></div></div>
+  <div class="panel hidden" id="phoneBox">📱 <b>Phone access is on.</b> Open <b id="phoneUrl"></b> on your phone (same Wi-Fi) to download and post clips directly.</div>
+  <div class="panel hidden" id="startBox">
+    <h2>Get started</h2>
+    <ol class="steps">
+      <li>Go to <b>Campaigns</b> → <b>+ New campaign</b> and paste the campaign's full brief from Whop/Vyro.</li>
+      <li>Check what AutoClipper understood, and fix anything.</li>
+      <li>Press <b>▶ Start</b>. Leave the PC on. Clips appear in <b>Clips</b>.</li>
+    </ol>
+  </div>
+  <div class="panel"><div class="row" style="justify-content:space-between"><h2>Live activity</h2>
+    <button class="btn sm" id="bClearLog">Clear view</button></div><div class="log" id="log"></div></div>
+</section>
+
+<!-- CLIPS -->
+<section id="clips" class="hidden">
+  <h1>Clips</h1><p class="sub">Download → copy caption → post → tick Posted. Delete the duds.</p>
+  <div class="panel row">
+    <select id="fCamp" style="width:auto"></select>
+    <select id="fShow" style="width:auto"><option value="new">Not posted</option><option value="all">All</option><option value="posted">Posted</option></select>
+    <button class="btn sm" id="bRefreshClips">↻ Refresh</button>
+    <span class="meta" id="clipCount"></span>
+  </div>
+  <div class="grid" id="clipGrid"></div>
+</section>
+
+<!-- CAMPAIGNS -->
+<section id="camps" class="hidden">
+  <h1>Campaigns</h1><p class="sub">One campaign = one brief. Every clip follows its campaign's rules.</p>
+  <div class="two">
+    <div><button class="btn pri" id="bNewCamp" style="width:100%;margin-bottom:12px">+ New campaign</button><div class="clist" id="campList"></div></div>
+    <div id="campDetail"><div class="panel empty">Select a campaign, or add a new one.</div></div>
+  </div>
+</section>
+
+<!-- TEST -->
+<section id="test" class="hidden">
+  <h1>Test a video</h1><p class="sub">Clip any gaming video on your PC with a campaign's rules. Good for checking quality before going live.</p>
+  <div class="panel">
+    <label class="f">Video file</label><input type="file" id="testFile" accept="video/*">
+    <label class="f">Use the rules of campaign</label><select id="testCamp"></select>
+    <div class="row" style="margin-top:14px"><button class="btn pri" id="bRunTest">Run test</button>
+      <span class="meta" id="testMsg"></span></div>
+    <p class="hint">Progress shows in Dashboard → Live activity. Results appear in Clips.</p>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section id="settings" class="hidden">
+  <h1>Settings</h1><p class="sub">Campaign briefs can override these.</p>
+  <div class="panel"><h2>Updates</h2>
+    <div class="row" style="justify-content:space-between"><div id="updInfo" class="meta">Checking…</div>
+    <div class="row"><button class="btn sm" id="bUpdCheck">Check for updates</button><button class="btn pri sm hidden" id="bUpdApply">Update now</button></div></div>
+    <details id="updNotesBox" class="hidden" style="margin-top:10px"><summary>What's new</summary><pre id="updNotes" style="white-space:pre-wrap;font-size:12px"></pre></details>
+    <p class="hint">New versions install automatically when AutoClipper starts (turn off with auto_update in config).</p></div>
+  <div class="panel" id="setForm"></div>
+  <div class="panel"><details><summary>Advanced: edit config.yaml directly</summary>
+    <textarea id="setYaml" style="min-height:380px;margin-top:10px"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="bSaveYaml">Save config.yaml</button></div></details></div>
+</section>
+</main></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(t,ms=1400){const e=$("#toast");e.textContent=t;e.style.display="block";clearTimeout(e._t);e._t=setTimeout(()=>e.style.display="none",ms)}
+async function api(url,opt={}){let r;
+  try{r=await fetch(url,opt)}catch(e){toast("Can't reach AutoClipper. Is the black AutoClipper window still open?",4000);throw e}
+  let j={};try{j=await r.json()}catch(e){}
+  if(!r.ok){toast(j.error||("Error "+r.status),2600);throw new Error(j.error||r.status)}return j}
+const post=(u,b)=>api(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})});
+function copy(t){const done=()=>toast("Copied!");
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(done,()=>fb(t,done))}else fb(t,done)}
+function fb(t,done){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy");done()}catch(e){}a.remove()}
+window.addEventListener("error",e=>toast("Something went wrong: "+(e.message||"unknown")+" (send a screenshot to Claude)",5000));
+window.addEventListener("unhandledrejection",e=>{if(e.reason&&!String(e.reason.message||"").match(/^\d+$/))console.warn(e.reason)});
+const fmtTime=s=>s?new Date(s).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}):"–";
+
+/* tabs */
+let tab="dash";
+$$("nav button").forEach(b=>b.onclick=()=>show(b.dataset.tab));
+function show(t){tab=t;$$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
+  $$("main>section").forEach(s=>s.classList.toggle("hidden",s.id!==t));
+  if(t==="clips")loadClips(); if(t==="camps")loadCamps(); if(t==="settings")loadSettings(); if(t==="test")fillCampSelect("#testCamp",false)}
+
+/* dashboard */
+const STATE_TEXT={working:"Working",idle:"Waiting for new streams",stopped:"Stopped",stopping:"Stopping…"};
+async function status(){try{const s=await api("/api/status");
+  $("#pill").className="pill "+s.state;$("#pillText").textContent=STATE_TEXT[s.state]||s.state;
+  $("#busy").textContent=s.state==="working"?s.busy_with:(s.last_check?"Last check "+fmtTime(s.last_check):"");
+  $("#tReady").textContent=s.clips_ready;$("#tPosted").textContent=s.clips_posted;$("#tCamps").textContent=s.campaigns;
+  $("#tNext").textContent=s.state==="idle"?fmtTime(s.next_check):(s.state==="working"?"now":"–");
+  $("#nReady").textContent=s.clips_ready;$("#navState").textContent=(STATE_TEXT[s.state]||"")+(s.test_running?" · test running":"");
+  $("#bStart").disabled=s.state!=="stopped";$("#bStop").disabled=s.state==="stopped"||s.state==="stopping";
+  $("#startBox").classList.toggle("hidden",s.campaigns>0);
+  $("#phoneBox").classList.toggle("hidden",!s.phone_url);if(s.phone_url)$("#phoneUrl").textContent=s.phone_url;
+}catch(e){$("#pillText").textContent="App not responding"}}
+$("#bStart").onclick=()=>post("/api/engine/start").then(status);
+$("#bStop").onclick=()=>post("/api/engine/stop").then(status);
+$("#bCheck").onclick=()=>post("/api/engine/check").then(()=>{toast("Checking now");status()});
+let logN=0;
+async function pollLog(){try{const rows=await api("/api/logs?since="+logN);if(rows.length){const box=$("#log");
+  const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<40;
+  rows.forEach(r=>{logN=r.n;const d=document.createElement("div");const l=r.line;
+    d.className=/fail|error|!!/i.test(l)?"e":/clip \d+ @|done:|clips made/i.test(l)?"g":/new stream|campaign footage/i.test(l)?"w":"";
+    d.textContent=l;box.appendChild(d)});
+  while(box.childNodes.length>600)box.removeChild(box.firstChild);if(atBottom)box.scrollTop=box.scrollHeight;
+  if(tab==="clips"&&rows.some(r=>/clip \d+ @/.test(r.line)))loadClips(true)}}catch(e){}}
+$("#bClearLog").onclick=()=>$("#log").innerHTML="";
+
+/* clips */
+let CLIPS=[];
+async function loadClips(quiet){CLIPS=await api("/api/clips");const camps=[...new Set(CLIPS.map(c=>c.campaign||"General"))];
+  const sel=$("#fCamp"),cur=sel.value;sel.innerHTML='<option value="">All campaigns</option>'+camps.map(c=>`<option>${esc(c)}</option>`).join("");
+  sel.value=camps.includes(cur)?cur:"";renderClips()}
+$("#fCamp").onchange=renderClips;$("#fShow").onchange=renderClips;$("#bRefreshClips").onclick=()=>loadClips();
+function renderClips(){const camp=$("#fCamp").value,showMode=$("#fShow").value;
+  const list=CLIPS.filter(c=>(!camp||(c.campaign||"General")===camp)&&(showMode==="all"||(showMode==="posted")===c.posted));
+  $("#clipCount").textContent=list.length+" clip"+(list.length===1?"":"s");
+  if(!list.length){$("#clipGrid").innerHTML=`<div class="empty" style="grid-column:1/-1">No clips here yet. They appear automatically once the engine finds new streams.</div>`;return}
+  $("#clipGrid").innerHTML=list.map((c,i)=>{const plats=c.platforms||["tiktok","youtube"];
+    const yt=plats.includes("youtube"),tt=plats.includes("tiktok")||plats.includes("instagram");
+    const checks=(c.checks||[]).map(k=>`<div class="chk ${k.ok?"ok":"bad"}">${k.ok?"✓":"✗ FIX:"} ${esc(k.text)}</div>`).join("");
+    const rules=(c.manual_rules||[]).length?`<details><summary>Brief rules to check (${c.manual_rules.length})</summary><ul>${c.manual_rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul></details>`:"";
+    const disc=c.disclosure?`<div class="chk" style="color:var(--acc)">⚠ Turn on ${tt?"TikTok “Paid partnership”":""}${tt&&yt?" / ":""}${yt?"YouTube “Paid promotion”":""} when posting</div>`:"";
+    return `<div class="card ${c.posted?"posted":""}" data-i="${i}">
+      <div class="row"><span class="tag">${esc(c.campaign||"General")}</span><span class="tag gray">${esc(c.layout||"")}</span><span class="tag gray">${esc(c.length_sec)}s</span></div>
+      <div class="media"><video src="${c.video}" controls preload="metadata" poster="${c.thumb}"></video><img src="${c.thumb}" loading="lazy"></div>
+      <div class="hook">${esc(c.hook)}</div>
+      <div class="meta">${esc(c.channel)} · ${esc((c.created||"").replace("T"," "))} · score ${esc(c.score)}</div>
+      <div class="row">${yt?`<button class="btn sm" data-a="yt">Copy YT title</button><button class="btn sm" data-a="yd">Copy YT description</button>`:""}
+        ${tt?`<button class="btn sm" data-a="tt">Copy ${plats.includes("tiktok")?"TikTok":"IG"} caption</button>`:""}</div>
+      <div class="row"><a class="btn sm" href="${c.video}?dl=1">⬇ Video</a><a class="btn sm" href="${c.thumb}?dl=1">⬇ Thumbnail</a>
+        <button class="btn sm" data-a="open">📁 Folder</button></div>
+      ${checks}${disc}${rules}
+      <div class="row" style="justify-content:space-between;margin-top:4px">
+        <button class="btn sm ${c.posted?"":"green"}" data-a="posted">${c.posted?"↩ Mark not posted":"✓ Mark posted"}</button>
+        <button class="btn sm red" data-a="del">Delete</button></div></div>`}).join("");
+  $$("#clipGrid .card").forEach(card=>{const c=list[+card.dataset.i];card.querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{
+    const a=b.dataset.a;
+    if(a==="yt")copy(c.youtube_title);if(a==="yd")copy(c.youtube_description);if(a==="tt")copy(c.tiktok_caption);
+    if(a==="open")post("/api/clips/open",{id:c.id});
+    if(a==="posted"){await post("/api/clips/posted",{id:c.id,posted:!c.posted});c.posted=!c.posted;renderClips();status()}
+    if(a==="del"&&confirm("Delete this clip from your PC?")){await post("/api/clips/delete",{id:c.id});CLIPS=CLIPS.filter(x=>x.id!==c.id);renderClips();status()}})})}
+
+/* campaigns */
+let CAMPS=[],selCamp=null;
+async function loadCamps(){CAMPS=await api("/api/campaigns");renderCampList();
+  if(selCamp&&CAMPS.find(c=>c.folder===selCamp))renderCamp(selCamp);else if(CAMPS[0]&&!$("#newForm"))renderCamp(CAMPS[0].folder)}
+function renderCampList(){$("#campList").innerHTML=CAMPS.length?CAMPS.map(c=>{const d=c.data||{};
+  return `<div class="ci ${c.folder===selCamp?"on":""}" data-f="${esc(c.folder)}"><div class="n">${esc(d.name||c.folder)}</div>
+  <div class="meta">${d.enabled===false?"⏸ Disabled":"● Active"} · ${(d.streamers||[]).length} streamer(s) · ${c.files.footage.length} footage file(s)</div>
+  ${c.activity?`<div class="meta" style="margin-top:4px;color:#c9ced8">${esc(c.activity.text.slice(0,70))}</div>`:""}</div>`}).join("")
+  :`<div class="empty">No campaigns yet.</div>`;
+  $$("#campList .ci").forEach(e=>e.onclick=()=>renderCamp(e.dataset.f))}
+async function fillCampSelect(sel,withNone){const list=CAMPS.length?CAMPS:(CAMPS=await api("/api/campaigns"));
+  $(sel).innerHTML=(withNone?'<option value="">(none)</option>':"")+list.map(c=>`<option value="${esc(c.folder)}">${esc((c.data||{}).name||c.folder)}</option>`).join("")||'<option value="">No campaigns yet — default settings</option>'}
+
+function activityHtml(c){const a=c.activity,eng=c.engine;
+  if(eng==="stopped")return `<div class="row" style="justify-content:space-between"><div><b>⏸ The engine is stopped</b>, so nothing is being clipped.</div><button class="btn green sm" onclick="post('/api/engine/start').then(()=>{toast('Engine started');status();setTimeout(loadCamps,1500)})">▶ Start engine</button></div>`;
+  const when=a?` <span class="meta">(${esc(a.time.slice(11,16))})</span>`:"";
+  return `<div><b>Latest activity:</b> ${a?esc(a.text):"Waiting for the engine to check this campaign…"}${when}</div>
+    <div class="hint" style="margin-top:6px">Clips appear in the Clips tab as soon as they're made. Full details are in Dashboard → Live activity.</div>`}
+async function refreshActivity(){if(tab!=="camps"||!selCamp||!$("#actBox"))return;
+  try{const list=await api("/api/campaigns");CAMPS=list;const c=list.find(x=>x.folder===selCamp);if(c)$("#actBox").innerHTML=activityHtml(c);renderCampList()}catch(e){}}
+setInterval(refreshActivity,4000);
+function yesno(v,dflt){return v===undefined?`<span class="meta">default (${dflt})</span>`:(v?"Yes":"No")}
+function renderCamp(folder){selCamp=folder;renderCampList();const c=CAMPS.find(x=>x.folder===folder);if(!c)return;const d=c.data||{};
+  const disc=d.disclosure||{},wm=d.watermark;
+  const len=(d.min_seconds||d.max_seconds)?`${d.min_seconds||0}–${d.max_seconds||"∞"} s`:(d.target_seconds?`about ${d.target_seconds}s (matches examples)`:'<span class="meta">default (~19s)</span>');
+  const files=k=>c.files[k].length?c.files[k].map(f=>`<span>${esc(f)} <b data-k="${k}" data-f="${esc(f)}" title="Remove">✕</b></span>`).join(""):'<span class="meta">none</span>';
+  const nothing=!(d.streamers||[]).length&&!c.files.footage.length;
+  $("#campDetail").innerHTML=`
+  <div class="panel" id="actBox" style="border-color:#3a4256">${activityHtml(c)}</div>
+  ${nothing?`<div class="panel" style="border-color:#5a2a31;background:#2a1519"><b>⚠ Nothing to clip yet.</b> The brief has no Twitch/Kick/YouTube link, and no footage is uploaded. Add the streamer's link to the brief (then <b>Save &amp; re-read</b>), or upload footage under Materials.</div>`:""}
+  <div class="panel"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(d.name||folder)}</h2>
+    <div class="row"><button class="btn sm" id="cToggle">${d.enabled===false?"▶ Enable":"⏸ Disable"}</button><button class="btn sm red" id="cDel">Delete</button></div></div>
+    <p class="hint">What AutoClipper understood from the brief (${esc(c.brief_file||"no brief yet")}):</p>
+    <div class="kv">
+      <div>Streamers watched</div><div>${(d.streamers||[]).map(s=>esc(s.name)+' <span class="meta">'+esc(s.url)+'</span>').join("<br>")||'<span class="meta">none — add stream links to the brief, or use footage</span>'}</div>
+      <div>Hashtags / tags</div><div>${esc([...(d.hashtags||[]),...(d.mentions||[])].join(" "))||'<span class="meta">none found</span>'}</div>
+      <div>Clip length</div><div>${len}</div>
+      <div>Platforms</div><div>${esc((d.platforms||["tiktok","youtube"]).join(", "))}${d.platforms?"":' <span class="meta">(default)</span>'}</div>
+      <div>Captions</div><div>${yesno(d.captions,"on")}</div>
+      <div>Title text on video</div><div>${yesno(d.hook_on_video,"on")}</div>
+      <div>Cold open / zoom</div><div>${yesno(d.cold_open,"on")} / ${yesno(d.zoom_on_peak,"on")}</div>
+      <div>Disclosure</div><div>${disc.enabled===false?"Off":esc((disc.caption_tag||"#ad")+" in caption · “"+(disc.on_screen_text||"Paid partnership")+"” on screen")}</div>
+      <div>Logo watermark</div><div>${wm?esc(wm.position)+" ("+esc(wm.file)+")":'<span class="meta">none</span>'}</div>
+    </div>
+    ${(d.rules_to_follow_manually||[]).length?`<details open style="margin-top:12px"><summary>Rules you'll check yourself while posting (${d.rules_to_follow_manually.length})</summary><ul>${d.rules_to_follow_manually.map(r=>`<li>${esc(r)}</li>`).join("")}</ul></details>`:""}
+  </div>
+  <div class="panel"><h2>Materials</h2>
+    <div class="kv"><div>Logo</div><div class="files">${files("logo")}</div>
+    <div>Footage to clip</div><div class="files">${files("footage")}</div>
+    <div>Example clips</div><div class="files">${files("examples")}</div></div>
+    <form id="upForm"><div class="row" style="margin-top:12px">
+      <label class="btn sm">+ Logo<input type="file" name="logo" accept="image/*" hidden></label>
+      <label class="btn sm">+ Footage<input type="file" name="footage" accept="video/*" multiple hidden></label>
+      <label class="btn sm">+ Examples<input type="file" name="examples" accept="video/*" multiple hidden></label>
+      <span class="meta" id="upMsg"></span></div></form>
+  </div>
+  <div class="panel"><h2>Brief</h2><textarea id="briefText" placeholder="Paste the full brief here">${esc(c.brief)}</textarea>
+    <div class="row" style="margin-top:10px"><button class="btn pri" id="cReparse">Save &amp; re-read brief</button>
+      <label class="btn">Upload PDF/DOCX<input type="file" id="briefFile" accept=".pdf,.docx,.txt,.md" hidden></label></div></div>
+  <div class="panel"><details><summary>Advanced: edit campaign.yaml (fix anything the reader got wrong)</summary>
+    <textarea id="campYaml" style="min-height:320px;margin-top:10px">${esc(c.yaml)}</textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="cSaveYaml">Save campaign.yaml</button>
+    <span class="hint">Saving by hand stops automatic re-reads of the brief.</span></div></details></div>`;
+  const F=encodeURIComponent(folder);
+  $("#cToggle").onclick=async()=>{await post(`/api/campaigns/${F}/toggle`);loadCamps()};
+  $("#cDel").onclick=async()=>{if(confirm("Delete this campaign folder (brief + materials)? Clips already made are kept.")){await post(`/api/campaigns/${F}/delete`);selCamp=null;$("#campDetail").innerHTML="";loadCamps();status()}};
+  $("#cReparse").onclick=async()=>{const fd=new FormData();fd.append("brief",$("#briefText").value);
+    await api(`/api/campaigns/${F}/update`,{method:"POST",body:fd});toast("Brief re-read");loadCamps()};
+  $("#briefFile").onchange=async e=>{const fd=new FormData();fd.append("brief_file",e.target.files[0]);
+    await api(`/api/campaigns/${F}/update`,{method:"POST",body:fd});toast("Brief uploaded & read");loadCamps()};
+  $("#upForm").querySelectorAll("input").forEach(inp=>inp.onchange=async()=>{const fd=new FormData();
+    [...inp.files].forEach(f=>fd.append(inp.name,f));$("#upMsg").textContent="Uploading…";
+    await api(`/api/campaigns/${F}/update`,{method:"POST",body:fd});toast("Uploaded");loadCamps()});
+  $$("#campDetail .files b").forEach(b=>b.onclick=async()=>{if(confirm("Remove "+b.dataset.f+"?")){
+    await post(`/api/campaigns/${F}/remove-file`,{kind:b.dataset.k,file:b.dataset.f});loadCamps()}});
+  $("#cSaveYaml").onclick=async()=>{await api(`/api/campaigns/${F}/yaml`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({yaml:$("#campYaml").value})});toast("Saved");loadCamps()};
+}
+$("#bNewCamp").onclick=()=>{selCamp=null;renderCampList();$("#campDetail").innerHTML=`
+  <div class="panel" id="newForm"><h2>New campaign</h2>
+  <label class="f">Campaign name</label><input type="text" id="nName" placeholder="e.g. Clix Pool">
+  <label class="f">Full brief: copy everything from the Whop/Vyro campaign page and paste it here</label>
+  <textarea id="nBrief" style="min-height:240px" placeholder="Rules, requirements, links, hashtags…"></textarea>
+  <label class="f">…or upload the brief as PDF/DOCX</label><input type="file" id="nBriefFile" accept=".pdf,.docx,.txt,.md">
+  <label class="f">Logo (optional, only if the campaign wants it on clips)</label><input type="file" id="nLogo" accept="image/*">
+  <label class="f">Footage the campaign gives you (optional)</label><input type="file" id="nFootage" accept="video/*" multiple>
+  <label class="f">Example clips they like (optional)</label><input type="file" id="nExamples" accept="video/*" multiple>
+  <div class="row" style="margin-top:16px"><button class="btn pri" id="nCreate">Create campaign</button><span class="meta" id="nMsg"></span></div></div>`;
+  $("#nCreate").onclick=async()=>{const fd=new FormData();fd.append("name",$("#nName").value);fd.append("brief",$("#nBrief").value);
+    if($("#nBriefFile").files[0])fd.append("brief_file",$("#nBriefFile").files[0]);
+    if($("#nLogo").files[0])fd.append("logo",$("#nLogo").files[0]);
+    [...$("#nFootage").files].forEach(f=>fd.append("footage",f));[...$("#nExamples").files].forEach(f=>fd.append("examples",f));
+    if(!$("#nName").value.trim()){toast("Type a campaign name first");$("#nName").focus();return}
+    if(!$("#nBrief").value.trim()&&!$("#nBriefFile").files[0]&&!$("#nFootage").files.length){toast("Paste the brief (or upload it) first");$("#nBrief").focus();return}
+    const btn=$("#nCreate");btn.disabled=true;btn.textContent="Creating…";
+    $("#nMsg").textContent=$("#nFootage").files.length?"Uploading footage — big videos can take a minute…":"Saving and reading the brief…";
+    try{const c=await api("/api/campaigns",{method:"POST",body:fd});toast("Campaign created — checking it now",2500);selCamp=c.folder;await loadCamps();renderCamp(c.folder);status()}
+    catch(e){btn.disabled=false;btn.textContent="Create campaign";$("#nMsg").textContent="Not created — see the message at the bottom of the screen."}}};
+
+/* test */
+$("#bRunTest").onclick=async()=>{const f=$("#testFile").files[0];if(!f){toast("Choose a video first");return}
+  const fd=new FormData();fd.append("video",f);fd.append("campaign",$("#testCamp").value);$("#testMsg").textContent="Uploading…";
+  try{await api("/api/test",{method:"POST",body:fd});$("#testMsg").textContent="Test started. Watch Dashboard → Live activity.";toast("Test started")}
+  catch(e){$("#testMsg").textContent=""}};
+
+/* settings */
+const FIELDS=[
+ ["check_every_minutes","number","Check for new streams every (minutes)"],
+ ["clips_per_hour","number","Clips per hour of stream"],
+ ["max_clips_per_stream","number","Max clips per stream"],
+ ["min_clips_per_stream","number","Min clips per stream"],
+ ["whisper_model","select:tiny,base,small","Caption accuracy (small = best for GTX 1660 Super)"],
+ ["output_folder","text","Clips folder (e.g. G:/My Drive/Clips to reach them from your phone)"],
+ ["captions","bool","Auto-captions on videos"],["hook_on_video","bool","Title bar hook (first 3 seconds)"],
+ ["cold_open","bool","Cold open (flash the payoff first)"],["zoom_on_peak","bool","Punch-in zoom on hype moment"],
+ ["use_chat","bool","Use chat activity to find moments"],["cleanup_sources","bool","Delete downloaded stream audio after clipping"],
+ ["auto_start_engine","bool","Start the engine automatically when the app opens"],
+ ["phone_access","bool","Phone access over Wi-Fi (restart app after changing). Anyone on your Wi-Fi can open it"]];
+async function loadSettings(){const s=await api("/api/settings");const d=s.data;$("#setYaml").value=s.yaml;
+  $("#setForm").innerHTML=FIELDS.map(([k,t,l])=>{const v=d[k];
+    if(t==="bool")return `<div class="toggle"><div>${esc(l)}</div><label class="sw"><input type="checkbox" data-k="${k}" ${v!==false&&v!==undefined&&(v||k!=="phone_access")?"checked":""}><span></span></label></div>`;
+    if(t.startsWith("select:"))return `<label class="f">${esc(l)}</label><select data-k="${k}">${t.slice(7).split(",").map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select>`;
+    return `<label class="f">${esc(l)}</label><input type="${t}" data-k="${k}" value="${esc(v??"")}">`}).join("")+
+    `<div class="row" style="margin-top:16px"><button class="btn pri" id="bSaveSet">Save settings</button></div>`;
+  $$("#setForm input[type=checkbox]").forEach(i=>{if(i.dataset.k==="phone_access")i.checked=!!d.phone_access});
+  $("#bSaveSet").onclick=async()=>{const fields={};$$("#setForm [data-k]").forEach(e=>{fields[e.dataset.k]=e.type==="checkbox"?e.checked:e.value});
+    await api("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({fields})});toast("Saved");loadSettings();status()}}
+$("#bSaveYaml").onclick=async()=>{await api("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({yaml:$("#setYaml").value})});toast("Saved");loadSettings()};
+
+async function checkUpdate(show){try{const u=await api("/api/update");
+  $("#updInfo").innerHTML=`You have <b>v${esc(u.current)}</b>`+(u.latest?` · latest is <b>v${esc(u.latest)}</b>`:"")+(u.error?` · <span style="color:var(--bad)">${esc(u.error)}</span>`:"")+(u.available?"":(u.latest?" · up to date ✓":""));
+  $("#bUpdApply").classList.toggle("hidden",!u.available);$("#updBox").classList.toggle("hidden",!u.available);
+  $("#updVer").textContent=u.available?`v${u.current} → v${u.latest}`:"";
+  $("#updNotesBox").classList.toggle("hidden",!u.notes);$("#updNotes").textContent=u.notes||"";
+  $("#navState").dataset.ver="v"+u.current;if(show)toast(u.available?"Update available":"You're up to date")}catch(e){}}
+async function doUpdate(){if(!confirm("Install the update now? AutoClipper restarts (about 20 seconds)."))return;
+  toast("Updating… the app will reload",6000);try{await post("/api/update/apply")}catch(e){return}
+  setTimeout(function wait(){fetch("/api/status").then(()=>location.reload()).catch(()=>setTimeout(wait,1500))},5000)}
+$("#bUpdCheck").onclick=()=>checkUpdate(true);$("#bUpdApply").onclick=doUpdate;$("#bUpdNow").onclick=doUpdate;
+checkUpdate(false);setInterval(()=>checkUpdate(false),3600000);
+status();pollLog();setInterval(status,3000);setInterval(pollLog,1500);
+</script>
+</body></html>
