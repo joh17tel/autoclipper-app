@@ -36,26 +36,60 @@ DISCLOSURE_TAGS = ["#ad", "#sponsored", "#partner", "#paidpartnership", "#advert
 
 
 # ------------------------------------------------------------------ reading
-def read_brief(folder: str) -> tuple[str, str | None]:
-    for name in BRIEF_NAMES:
+def brief_files(folder: str) -> list[str]:
+    """Pasted brief (brief.txt/.md) first, then uploaded documents (brief_upload.*, brief.pdf...)."""
+    files = []
+    for name in ("brief.txt", "brief.md"):
         p = os.path.join(folder, name)
-        if not os.path.exists(p):
-            continue
+        if os.path.exists(p):
+            files.append(p)
+    for p in sorted(glob.glob(os.path.join(folder, "brief*"))):
+        if p not in files and p.lower().endswith((".pdf", ".docx", ".txt", ".md")):
+            files.append(p)
+    return files
+
+
+def _read_one(p: str) -> str:
+    name = p.lower()
+    if name.endswith(".pdf"):
+        from pypdf import PdfReader
+        return "\n".join((pg.extract_text() or "") for pg in PdfReader(p).pages)
+    if name.endswith(".docx"):
+        import zipfile
+        with zipfile.ZipFile(p) as z:
+            xml = z.read("word/document.xml").decode("utf-8", "ignore")
+        xml = re.sub(r"</w:p>", "\n", xml)
+        return re.sub(r"<[^>]+>", "", xml)
+    with open(p, encoding="utf-8", errors="ignore") as f:
+        return f.read()
+
+
+def read_brief(folder: str) -> tuple[str, str | None]:
+    """All brief texts combined (pasted text + uploaded PDF/DOCX). Returns (text, label)."""
+    parts, names = [], []
+    for p in brief_files(folder):
         try:
-            if name.endswith(".pdf"):
-                from pypdf import PdfReader
-                return "\n".join((pg.extract_text() or "") for pg in PdfReader(p).pages), p
-            if name.endswith(".docx"):
-                import zipfile
-                with zipfile.ZipFile(p) as z:
-                    xml = z.read("word/document.xml").decode("utf-8", "ignore")
-                xml = re.sub(r"</w:p>", "\n", xml)
-                return re.sub(r"<[^>]+>", "", xml), p
-            with open(p, encoding="utf-8", errors="ignore") as f:
-                return f.read(), p
+            t = _read_one(p)
+            if t.strip():
+                parts.append(t)
+                names.append(os.path.basename(p))
         except Exception as e:
-            print(f"   (couldn't read {name}: {e})")
-    return "", None
+            print(f"   (couldn't read {os.path.basename(p)}: {e})")
+    if not parts:
+        return "", None
+    return "\n\n".join(parts), " + ".join(names)
+
+
+def pasted_brief(folder: str) -> str:
+    p = os.path.join(folder, "brief.txt")
+    if os.path.exists(p):
+        with open(p, encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    return ""
+
+
+def brief_mtime(folder: str) -> float:
+    return max((os.path.getmtime(p) for p in brief_files(folder)), default=0)
 
 
 # ------------------------------------------------------------------ parsing
@@ -161,8 +195,10 @@ def parse_brief(text: str) -> dict:
         pieces += re.split(r"(?<=[.!?])\s+(?=[A-Z])", raw_line)
     for line in pieces:
         l = line.strip()
-        if 12 <= len(l) <= 220 and re.search(
-                r"\b(must|do not|don'?t|never|avoid|required|requirement|only|banned|not allowed|prohibited|make sure)\b", l, re.I):
+        if 12 <= len(l) <= 220 and (re.search(
+                r"\b(must|do not|don'?t|never|avoid|required|requirement|only|banned|not allowed|prohibited|"
+                r"make sure|should|at least|keep|need to|forbidden)\b", l, re.I)
+                or re.match(r"(no|hook|vertical|use|tag|include|post)\b", l, re.I)):
             if l not in manual:
                 manual.append(l)
     if manual:
@@ -226,7 +262,7 @@ def build_campaign_yaml(folder: str) -> dict:
                              "position": "top-right", "size": 0.18, "opacity": 0.9}
     if rules.get("rules_to_follow_manually"):
         data["rules_to_follow_manually"] = rules["rules_to_follow_manually"]
-    data["_brief"] = os.path.basename(brief_path) if brief_path else "none found - add brief.txt"
+    data["_brief"] = brief_path or "none found - add brief.txt"
     _write_yaml(os.path.join(folder, "campaign.yaml"), data)
     return data
 
@@ -234,12 +270,12 @@ def build_campaign_yaml(folder: str) -> dict:
 def load_campaign(folder: str) -> dict:
     """Read campaign.yaml, (re)building it from the brief when needed."""
     y = os.path.join(folder, "campaign.yaml")
-    _, brief = read_brief(folder)
+    newest = brief_mtime(folder)
     rebuild = not os.path.exists(y)
-    if not rebuild and brief:
+    if not rebuild and newest:
         with open(y, encoding="utf-8") as f:
             first = f.readline()
-        rebuild = first.startswith(AUTO_MARK) and os.path.getmtime(brief) > os.path.getmtime(y)
+        rebuild = first.startswith(AUTO_MARK) and newest > os.path.getmtime(y)
     if rebuild:
         print(f"   reading brief for campaign '{os.path.basename(folder)}'")
         return build_campaign_yaml(folder)
@@ -307,9 +343,27 @@ def footage_files(folder: str) -> list[str]:
     return sorted(p for ext in ("mp4", "mov", "mkv", "webm") for p in glob.glob(os.path.join(d, f"*.{ext}")))
 
 
+def folder_name(name: str) -> str:
+    """'$8,500 FaZe Tournament!' -> '8_500_FaZe_Tournament' (never starts with _ so it isn't hidden)."""
+    n = re.sub(r"[^A-Za-z0-9-]+", "_", name).strip("_-")
+    n = re.sub(r"_+", "_", n)[:50].strip("_-")
+    return n or "Campaign"
+
+
 def discover(root: str = "campaigns") -> list[str]:
     if not os.path.isdir(root):
         return []
+    # fix folders an older version hid by accident (names starting with "_")
+    for d in os.listdir(root):
+        full = os.path.join(root, d)
+        if d.startswith("_") and d != "_TEMPLATE" and os.path.isdir(full) and \
+                (os.path.exists(os.path.join(full, "campaign.yaml")) or os.path.exists(os.path.join(full, "brief.txt"))):
+            new = os.path.join(root, folder_name(d))
+            if not os.path.exists(new):
+                try:
+                    os.rename(full, new)
+                except OSError:
+                    pass
     return sorted(os.path.join(root, d) for d in os.listdir(root)
                   if os.path.isdir(os.path.join(root, d)) and not d.startswith(("_", ".")))
 

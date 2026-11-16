@@ -304,7 +304,9 @@ function renderCamp(folder){selCamp=folder;renderCampList();const c=CAMPS.find(x
       <label class="btn sm">+ Examples<input type="file" name="examples" accept="video/*" multiple hidden></label>
       <span class="meta" id="upMsg"></span></div></form>
   </div>
-  <div class="panel"><h2>Brief</h2><textarea id="briefText" placeholder="Paste the full brief here">${esc(c.brief)}</textarea>
+  <div class="panel"><h2>Brief</h2>
+    ${(c.brief_docs||[]).length?`<p class="hint">Also reading uploaded document: <b>${c.brief_docs.map(esc).join(", ")}</b></p>`:""}
+    <textarea id="briefText" placeholder="Paste the full brief here">${esc(c.brief)}</textarea>
     <div class="row" style="margin-top:10px"><button class="btn pri" id="cReparse">Save &amp; re-read brief</button>
       <label class="btn">Upload PDF/DOCX<input type="file" id="briefFile" accept=".pdf,.docx,.txt,.md" hidden></label></div></div>
   <div class="panel"><details><summary>Advanced: edit campaign.yaml (fix anything the reader got wrong)</summary>
@@ -343,8 +345,11 @@ $("#bNewCamp").onclick=()=>{selCamp=null;renderCampList();$("#campDetail").inner
     if(!$("#nBrief").value.trim()&&!$("#nBriefFile").files[0]&&!$("#nFootage").files.length){toast("Paste the brief (or upload it) first");$("#nBrief").focus();return}
     const btn=$("#nCreate");btn.disabled=true;btn.textContent="Creating…";
     $("#nMsg").textContent=$("#nFootage").files.length?"Uploading footage — big videos can take a minute…":"Saving and reading the brief…";
-    try{const c=await api("/api/campaigns",{method:"POST",body:fd});toast("Campaign created — checking it now",2500);selCamp=c.folder;await loadCamps();renderCamp(c.folder);status()}
-    catch(e){btn.disabled=false;btn.textContent="Create campaign";$("#nMsg").textContent="Not created — see the message at the bottom of the screen."}}};
+    const slow=setTimeout(()=>{$("#nMsg").innerHTML="Still working… If this doesn't finish in a minute, click the black AutoClipper window and press <b>Enter</b>, then try again."},30000);
+    try{const c=await api("/api/campaigns",{method:"POST",body:fd});clearTimeout(slow);toast("Campaign created — checking it now",2500);selCamp=c.folder;await loadCamps();
+      if(!CAMPS.find(x=>x.folder===c.folder)){CAMPS.push(c);renderCampList()}
+      renderCamp(c.folder);status()}
+    catch(e){clearTimeout(slow);btn.disabled=false;btn.textContent="Create campaign";$("#nMsg").textContent="Not created — see the message at the bottom of the screen."}}};
 
 /* test */
 $("#bRunTest").onclick=async()=>{const f=$("#testFile").files[0];if(!f){toast("Choose a video first");return}

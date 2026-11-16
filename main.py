@@ -44,9 +44,38 @@ LOG_HOOKS = []          # the app's live log listens here
 STOP_CHECK = [lambda: False]   # the app can ask a running job to stop early
 
 
+import queue as _queue
+import threading as _threading
+_PRINTQ = _queue.Queue()
+
+
+def _printer():
+    while True:
+        line = _PRINTQ.get()
+        try:
+            print(line, flush=True)
+        except Exception:
+            pass
+
+
+_threading.Thread(target=_printer, daemon=True).start()
+
+
+def _drain():
+    import time as _t
+    for _ in range(50):
+        if _PRINTQ.empty():
+            break
+        _t.sleep(0.02)
+
+
+import atexit as _atexit
+_atexit.register(_drain)
+
+
 def log(msg):
     line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}"
-    print(line, flush=True)
+    _PRINTQ.put(line)          # printing happens in the background, so it can never freeze the app
     for h in LOG_HOOKS:
         try:
             h(line)

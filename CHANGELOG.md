@@ -1,5 +1,12 @@
 # What's new
 
+## v6.0.2
+- Fixed: "Create campaign" got stuck when the name started with a symbol (like "$8,500 ...")
+- Campaigns hidden by that bug are recovered automatically
+- Pasted brief AND uploaded PDF/DOCX are now both read (before, the PDF replaced the pasted text)
+- Clicking inside the black window can no longer freeze the app
+- Better detection of brief rules to check yourself ("No ...", "Keep ...", "Hook ...")
+
 ## v6.0.1
 - Updates now come from github.com/joh17tel/autoclipper-app
 - Update source can be changed in Settings

@@ -16,6 +16,25 @@ import webbrowser
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
+
+def _disable_quickedit():
+    """Clicking inside the black window normally FREEZES the app (Windows QuickEdit).
+    Turn that off so a stray click can never hang AutoClipper."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.GetStdHandle(-10)
+        mode = ctypes.c_uint32()
+        if k.GetConsoleMode(h, ctypes.byref(mode)):
+            k.SetConsoleMode(h, (mode.value & ~0x0040) | 0x0080)
+    except Exception:
+        pass
+
+
+_disable_quickedit()
+
 try:
     import yaml
     from flask import Flask, abort, jsonify, request, send_file, send_from_directory
@@ -64,7 +83,7 @@ def inside(base: str, rel: str) -> str:
 
 
 def camp_dir(name: str) -> str:
-    p = inside(camp_root(), core.safe(name))
+    p = inside(camp_root(), os.path.basename(name))
     if not os.path.isdir(p):
         abort(404)
     return p
@@ -197,12 +216,14 @@ def campaign_summary(folder):
     files = {k: [os.path.basename(x) for x in glob.glob(os.path.join(mats, k, "*"))]
              for k in ("footage", "examples")}
     files["logo"] = [os.path.basename(x) for x in glob.glob(os.path.join(mats, "logo.*"))]
-    brief, path = campaign.read_brief(folder)
+    _, label = campaign.read_brief(folder)
+    docs = [os.path.basename(p) for p in campaign.brief_files(folder)
+            if os.path.basename(p) not in ("brief.txt", "brief.md")]
     yp = os.path.join(folder, "campaign.yaml")
     nm = (data or {}).get("name") or os.path.basename(folder)
-    return {"folder": os.path.basename(folder), "data": data, "files": files,
+    return {"folder": os.path.basename(folder), "data": data, "files": files, "brief_docs": docs,
             "activity": ENGINE.camp_status.get(nm), "engine": ENGINE.status()["state"],
-            "brief": brief, "brief_file": os.path.basename(path) if path else None,
+            "brief": campaign.pasted_brief(folder), "brief_file": label,
             "yaml": open(yp, encoding="utf-8").read() if os.path.exists(yp) else ""}
 
 
@@ -225,17 +246,17 @@ def _save_uploads(folder):
             os.remove(old)
         logo.save(os.path.join(mats, "logo" + ext))
     bf = request.files.get("brief_file")
-    if bf and bf.filename:
+    if bf and bf.filename:   # kept ALONGSIDE the pasted text; both are read
         ext = os.path.splitext(bf.filename)[1].lower()
         if ext in (".txt", ".md", ".pdf", ".docx"):
-            for old in glob.glob(os.path.join(folder, "brief.*")):
+            for old in glob.glob(os.path.join(folder, "brief_upload.*")):
                 os.remove(old)
-            bf.save(os.path.join(folder, "brief" + ext))
+            bf.save(os.path.join(folder, "brief_upload" + ext))
 
 
 @app.post("/api/campaigns")
 def create_campaign():
-    name = core.safe(request.form.get("name", "").strip().replace(" ", "_"))
+    name = campaign.folder_name(request.form.get("name", "").strip()) if request.form.get("name", "").strip() else ""
     if not name:
         return jsonify({"error": "Give the campaign a name."}), 400
     folder = os.path.join(camp_root(), name)
@@ -258,9 +279,7 @@ def create_campaign():
 def update_campaign(name):
     folder = camp_dir(name)
     text = request.form.get("brief")
-    if text is not None and text.strip():
-        for old in glob.glob(os.path.join(folder, "brief.*")):
-            os.remove(old)
+    if text is not None:   # replaces only the pasted text, not uploaded documents
         with open(os.path.join(folder, "brief.txt"), "w", encoding="utf-8") as f:
             f.write(text)
     _save_uploads(folder)
