@@ -1,5 +1,9 @@
 # What's new
 
+## v6.0.1
+- Updates now come from github.com/joh17tel/autoclipper-app
+- Update source can be changed in Settings
+
 ## v6.0.0
 - Self-updating: new versions install automatically when AutoClipper starts
 - Settings → Updates: check and install updates with one click

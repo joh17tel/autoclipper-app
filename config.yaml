@@ -21,7 +21,7 @@ phone_access: false         # true = open the app from your phone on the same Wi
 
 # ---- Updates (new versions install themselves) ----
 auto_update: true
-update_repo: "krankyclips-source/autoclipper"
+update_repo: "joh17tel/autoclipper-app"
 update_branch: "main"
 
 # How often to check for new streams (minutes)
