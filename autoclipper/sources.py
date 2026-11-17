@@ -51,3 +51,39 @@ def download_section(url: str, start: int, end: int, out_path: str) -> str:
         path = ydl.prepare_filename(info)
     mp4 = base + ".mp4"
     return mp4 if os.path.exists(mp4) else path
+
+
+def twitch_login(url: str) -> str | None:
+    import re
+    m = re.match(r"https?://(?:www\.|m\.)?twitch\.tv/([A-Za-z0-9_]+)", url or "")
+    return m.group(1) if m and m.group(1).lower() not in ("videos", "directory") else None
+
+
+def twitch_top_clips(channel_url: str, rng: str = "7d", limit: int = 40) -> list[dict]:
+    """Most-viewed clips that viewers made of this streamer (best first)."""
+    login = twitch_login(channel_url)
+    if not login:
+        return []
+    url = f"https://www.twitch.tv/{login}/clips?filter=clips&range={rng}"
+    opts = {"quiet": True, "extract_flat": True, "playlistend": limit, "skip_download": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    out = []
+    for e in (info.get("entries") or [])[:limit]:
+        if e and e.get("url"):
+            out.append({"id": str(e.get("id")), "url": e["url"], "title": e.get("title") or "",
+                        "view_count": e.get("view_count") or 0, "duration": e.get("duration") or 0,
+                        "timestamp": e.get("timestamp")})
+    out.sort(key=lambda c: c["view_count"], reverse=True)
+    return out
+
+
+def download_clip(url: str, out_path: str) -> str:
+    base, _ = os.path.splitext(out_path)
+    opts = {"quiet": True, "format": "bv*[height<=1080]+ba/b[height<=1080]/b",
+            "outtmpl": base + ".%(ext)s", "merge_output_format": "mp4"}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        path = ydl.prepare_filename(info)
+    mp4 = base + ".mp4"
+    return mp4 if os.path.exists(mp4) else path

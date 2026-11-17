@@ -60,7 +60,7 @@ def clip_count(duration_s: int, per_hour: float, lo: int, hi: int) -> int:
 
 def find_highlights(audio: np.ndarray, chat: np.ndarray | None, n: int,
                     before: int, after: int, min_gap: int,
-                    min_score: float = 1.5) -> list[tuple[int, int, float]]:
+                    min_score: float = 1.5, extra: np.ndarray | None = None) -> list[tuple[int, int, float]]:
     """Return up to n (start, end, score) windows, best first, non-overlapping."""
     dur = len(audio)
     if dur == 0:
@@ -71,6 +71,10 @@ def find_highlights(audio: np.ndarray, chat: np.ndarray | None, n: int,
         # chat reacts a few seconds late, so shift it back
         shifted = np.roll(_smooth(chat, 5), -4)
         score = 0.6 * score + 0.4 * _zscore_rolling(shifted)
+    if extra is not None and len(extra) and np.max(extra) > 0:
+        ex = extra[:dur] if len(extra) >= dur else np.pad(extra, (0, dur - len(extra)))
+        ex = (ex - ex.mean()) / (ex.std() + 1e-6)   # viewers re-watching = proven moment
+        score = 0.55 * score + 0.45 * ex
 
     order = np.argsort(score)[::-1]
     picks: list[tuple[int, int, float]] = []
@@ -89,3 +93,14 @@ def find_highlights(audio: np.ndarray, chat: np.ndarray | None, n: int,
         peaks.append(int(peak))
         picks.append((start, end, float(score[peak])))
     return picks
+
+
+def heatmap_per_second(heatmap: list | None, duration: int) -> np.ndarray | None:
+    """YouTube 'Most replayed' graph -> one value per second."""
+    if not heatmap or duration <= 0:
+        return None
+    arr = np.zeros(duration)
+    for h in heatmap:
+        a, b = int(h.get("start_time", 0)), int(h.get("end_time", 0))
+        arr[max(0, a):min(duration, max(b, a + 1))] = float(h.get("value", 0))
+    return arr

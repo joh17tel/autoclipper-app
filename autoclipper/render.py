@@ -185,10 +185,13 @@ def make_vertical(src: str, dst: str, ass_path: str | None = None,
         wm = None
     vf = build_filter(w, h, cam, peak, ass_path, wm=wm)
     logo_in = ["-loop", "1", "-i", wm["file"]] if wm else []
-    enc = (["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "23"] if _has_nvenc()
-           else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21"])
+    # gaming looks best at the source's 60fps; high quality, platform-friendly bitrate
+    enc = (["-c:v", "h264_nvenc", "-preset", "p6", "-rc", "vbr", "-cq", "20",
+            "-b:v", "12M", "-maxrate", "16M", "-bufsize", "24M"] if _has_nvenc()
+           else ["-c:v", "libx264", "-preset", "medium", "-crf", "19", "-maxrate", "16M", "-bufsize", "24M"])
+    fps = str(_fps(src))
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", src, *logo_in, "-filter_complex", vf,
-                    "-map", "[v]", "-map", "0:a?", *enc, "-r", "30", "-pix_fmt", "yuv420p",
+                    "-map", "[v]", "-map", "0:a?", *enc, "-r", fps, "-g", str(int(fps) * 2), "-pix_fmt", "yuv420p",
                     "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", dst], check=True)
 
 
@@ -214,10 +217,24 @@ def cold_open(src: str, peak: float, dst: str, length: float = 1.4) -> float:
     return b - a
 
 
-def cut(src: str, start: float, end: float, dst: str) -> None:
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(start), "-to", str(end),
-                    "-i", src, "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-                    "-c:a", "aac", dst], check=True)
+def cut(src: str, start: float, end: float, dst: str, normalize: bool = False) -> None:
+    """Frame-accurate cut. normalize=True evens out loudness (-14 LUFS, what TikTok/Shorts use)."""
+    af = ["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"] if normalize else []
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+                    "-i", src, "-c:v", "libx264", "-preset", "veryfast", "-crf", "16",
+                    *af, "-c:a", "aac", "-b:a", "192k", "-ar", "48000", dst], check=True)
+
+
+def _fps(path: str) -> int:
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=avg_frame_rate", "-of", "csv=p=0", path],
+                             capture_output=True, text=True).stdout.strip()
+        n, d = out.split("/")
+        f = float(n) / float(d)
+        return 60 if f >= 50 else 30
+    except Exception:
+        return 30
 
 
 def ffmpeg_ok() -> bool:

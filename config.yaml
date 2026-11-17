@@ -34,6 +34,13 @@ clips_per_hour: 3
 min_clips_per_stream: 3
 max_clips_per_stream: 12
 
+# ---- Where moments come from ----
+use_viewer_clips: true        # Twitch: use clips the streamer's viewers made (human-picked = best quality)
+prefer_viewer_clips: true     # if viewer clips exist, skip guessing moments from the full stream
+viewer_clips_range: "7d"      # 24hr / 7d / 30d
+viewer_clips_min_views: 25    # ignore viewer clips with fewer views than this
+normalize_audio: true         # even out loudness to -14 LUFS (TikTok/Shorts standard)
+
 # ---- Clip shape ----
 # Short wins: 11–20s Shorts get the most median views. Build-up + payoff + reaction.
 clip_before_peak: 12        # seconds kept before the hype moment (the build-up)

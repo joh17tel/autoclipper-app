@@ -60,7 +60,8 @@ def quote_near_peak(words: list[dict], peak_t: float, span: float = 4.0, max_wor
 
 
 def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
-               seed: str, used: set | None = None, disclosure_tag: str = "") -> dict:
+               seed: str, used: set | None = None, disclosure_tag: str = "",
+               hook_hint: str | None = None) -> dict:
     """used: hooks already given to other clips of this stream (avoids repeats)."""
     rnd = random.Random(seed)  # same clip -> same text if re-run
     used = used if used is not None else set()
@@ -68,8 +69,13 @@ def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
     options = [t.format(s=streamer) for t in HOOK_TEMPLATES]
     rnd.shuffle(options)
     template_hook = next((o for o in options if o not in used), options[0])
-    # On-screen hook: their words if short and punchy, else a template
-    if quote and len(quote.split()) <= 6:
+    # On-screen hook: a viewer's clip title (written by a fan = best hook), else their words, else a template
+    hint = _clean(re.sub(r"[^\w\s'!?.,-]", "", hook_hint or ""))
+    good_hint = hint and 2 <= len(hint.split()) <= 9 and hint.lower() not in (streamer.lower(), "clip") \
+        and not re.fullmatch(r"(clip|stream|highlight)s?\s*\d*", hint.lower())
+    if good_hint:
+        hook = hint
+    elif quote and len(quote.split()) <= 6:
         hook = quote
     else:
         hook = template_hook

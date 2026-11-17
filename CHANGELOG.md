@@ -1,5 +1,15 @@
 # What's new
 
+## v6.1.0 — Quality upgrade
+- Twitch: uses the clips the streamer's own viewers made (the most-viewed ones) as the source of moments,
+  instead of guessing from loudness. Their clip title becomes the hook. Tagged "viewer pick" in Clips.
+- YouTube: uses the "Most replayed" graph to find the moments people re-watch
+- Cuts snap to whole sentences: clips start at the beginning of a phrase (keeps the setup)
+  and end after the reaction finishes, never mid-word
+- Loudness evened out to -14 LUFS (TikTok/Shorts standard), so no more quiet or blown-out clips
+- Keeps 60fps when the stream is 60fps; higher quality encoding
+- Downloads extra seconds around each moment so the setup is never cut off
+
 ## v6.0.2
 - Fixed: "Create campaign" got stuck when the name started with a symbol (like "$8,500 ...")
 - Campaigns hidden by that bug are recovered automatically
