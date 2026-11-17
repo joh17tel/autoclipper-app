@@ -378,6 +378,8 @@ $("#bRunTest").onclick=async()=>{const f=$("#testFile").files[0];if(!f){toast("C
 const FIELDS=[
  ["check_every_minutes","number","Check for new streams every (minutes)"],
  ["clips_per_hour","number","Clips per hour of stream"],
+ ["max_clip_seconds","number","Longest clip (seconds) - clips grow with the action up to this"],
+ ["cut_dead_air","bool","Cut quiet dead air inside clips (keeps the pace up)"],
  ["max_clips_per_stream","number","Max clips per stream"],
  ["min_clips_per_stream","number","Min clips per stream"],
  ["whisper_model","select:tiny,base,small","Caption accuracy (small = best for GTX 1660 Super)"],

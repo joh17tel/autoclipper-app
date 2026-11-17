@@ -294,19 +294,24 @@ def merged_cfg(cfg: dict, camp: dict, folder: str) -> dict:
     d.update(camp.get("disclosure") or {})
     m["disclosure"] = d
 
-    # fit clip length to the brief: build-up 65%, reaction 35%
+    # fit clip length to the brief. Clips grow with the action between a minimum and a maximum.
     cold = 1.4 if m.get("cold_open", True) else 0.0
-    default_len = cfg["clip_before_peak"] + cfg["clip_after_peak"] + cold
-    target = camp.get("target_seconds") or default_len
     lo, hi = camp.get("min_seconds"), camp.get("max_seconds")
-    if lo:
-        target = max(target, lo + 1)
+    max_len = float(cfg.get("max_clip_seconds", 30))
     if hi:
-        target = min(target, hi - 1)
-    if target != default_len:
-        body = max(6.0, target - cold)
-        m["clip_before_peak"] = int(round(body * 0.65))
-        m["clip_after_peak"] = max(3, int(round(body * 0.35)))
+        max_len = min(max_len, float(hi) - 0.5)
+    if camp.get("target_seconds") and not (lo or hi):
+        max_len = min(max_len, float(camp["target_seconds"]) + 2)   # match the example clips
+    m["max_clip_seconds"] = max_len
+    body = max(6.0, max_len - cold)
+    m["clip_before_peak"] = min(int(cfg["clip_before_peak"]), int(round(body * 0.67)))
+    m["clip_after_peak"] = min(int(cfg["clip_after_peak"]), max(3, int(round(body * 0.33))))
+    if lo:  # make sure even the shortest clip meets the brief's minimum
+        need = float(lo) + 1 - cold
+        m["min_build_up"] = max(int(cfg.get("min_build_up", 10)), int(round(need * 0.65)))
+        m["min_reaction"] = max(int(cfg.get("min_reaction", 5)), int(round(need * 0.35)) + 1)
+        m["clip_before_peak"] = max(m["clip_before_peak"], m["min_build_up"])
+        m["clip_after_peak"] = max(m["clip_after_peak"], m["min_reaction"])
 
     wm = camp.get("watermark")
     if wm and wm.get("file"):

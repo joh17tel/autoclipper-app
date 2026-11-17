@@ -105,15 +105,23 @@ def safe(name: str) -> str:
 
 
 # ---------------------------------------------------------------- clipping
+def max_body(cfg) -> float:
+    """Longest a clip may be before the cold open is added."""
+    cold = 1.4 if cfg.get("cold_open", True) else 0.0
+    return float(cfg.get("max_clip_seconds", 30)) - cold - 0.5
+
+
 def pick_highlights(cfg, audio, chat, extra=None):
     dur = len(audio)
     n = detect.clip_count(dur, cfg.get("clips_per_hour", 3),
                           cfg.get("min_clips_per_stream", 3), cfg.get("max_clips_per_stream", 12))
     args = (audio, chat, n, cfg["clip_before_peak"], cfg["clip_after_peak"],
             cfg["min_gap_between_clips"])
-    picks = detect.find_highlights(*args, min_score=1.5, extra=extra)
+    kw = {"extra": extra, "max_len": max_body(cfg),
+          "min_before": int(cfg.get("min_build_up", 10)), "min_after": int(cfg.get("min_reaction", 5))}
+    picks = detect.find_highlights(*args, min_score=1.5, **kw)
     if len(picks) < n:  # quiet stream: relax the bar to still get enough clips
-        picks = detect.find_highlights(*args, min_score=0.8, extra=extra)
+        picks = detect.find_highlights(*args, min_score=0.8, **kw)
     return n, picks
 
 
@@ -182,12 +190,52 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
     # 1) transcribe once (padded), snap the cut to sentence boundaries
     words_all = captions.transcribe_words(raw, cfg.get("whisper_model", "small")) if use_caps else []
     s, e = snap_bounds(words_all, max(0.0, want_s), min(dur, want_e), 0.0, dur)
+    cap = max_body(cfg)
+    if e - s > cap:  # keep the payoff + reaction, shave the build-up
+        s = max(s, e - cap)
+        if peak < s + 2:
+            s, e = max(0.0, peak - 2), max(0.0, peak - 2) + cap
     trimmed = os.path.join(cdir, "trim.mp4")
     render.cut(raw, s, e, trimmed, normalize=cfg.get("normalize_audio", True))
     temps.append(trimmed)
     words = [{"word": w["word"], "start": w["start"] - s, "end": w["end"] - s}
              for w in words_all if w["start"] >= s - 0.05 and w["end"] <= e + 0.1]
     peak_t = min(max(peak - s, 0.5), max(e - s - 0.5, 0.5))
+
+    # cut dead air (quiet stretches with no talking and no action) to keep the pace up
+    if cfg.get("cut_dead_air", True):
+        quiet = [(a, b) for a, b in detect.silences(trimmed, min_len=float(cfg.get("dead_air_seconds", 1.2)))
+                 if b - a >= 1.0 and not (a - 2.5 <= peak_t <= b + 2.5)
+                 and not any(a < w["start"] < b for w in words)]
+        if quiet:
+            clip_len = layout.probe_duration(trimmed)
+            keep, cur = [], 0.0
+            for a, b in quiet:
+                a2, b2 = a + 0.25, b - 0.25          # leave a little breathing room
+                if a2 - cur > 0.3:
+                    keep.append((cur, a2))
+                cur = max(cur, b2)
+            if clip_len - cur > 0.3:
+                keep.append((cur, clip_len))
+            removed = clip_len - sum(b - a for a, b in keep)
+            if removed >= 0.8 and sum(b - a for a, b in keep) >= 8:
+                tight = os.path.join(cdir, "tight.mp4")
+                render.keep_segments(trimmed, keep, tight)
+                temps.append(tight)
+
+                def remap(t):
+                    out = 0.0
+                    for a, b in keep:
+                        if t >= b:
+                            out += b - a
+                        elif t >= a:
+                            return out + (t - a)
+                        else:
+                            return out
+                    return out
+                words = [{"word": w["word"], "start": remap(w["start"]), "end": remap(w["end"])} for w in words]
+                peak_t = remap(peak_t)
+                trimmed = tight
 
     # 2) cold open: flash the payoff first
     src = trimmed
@@ -251,7 +299,7 @@ def clip_stream(cfg, get_part, audio_path, stream_dir, streamer, hashtags, chat=
     os.makedirs(stream_dir, exist_ok=True)
     made, used_hooks = 0, set()
     cam, cam_checked = None, False
-    for i, (start, end, score) in enumerate(sorted(picks, key=lambda p: p[0]), 1):
+    for i, (start, end, score, peak_abs) in enumerate(sorted(picks, key=lambda p: p[0]), 1):
         if should_stop():
             log("   stopping (requested)")
             break
@@ -267,7 +315,6 @@ def clip_stream(cfg, get_part, audio_path, stream_dir, streamer, hashtags, chat=
                 cam = resolve_facecam(facecam_setting, raw)
                 cam_checked = True
                 log(f"   layout: {'facecam on top + gameplay' if cam else 'gameplay only'}")
-            peak_abs = min(start + cfg["clip_before_peak"], end)
             meta = finish_clip(cfg, raw, cdir, streamer, hashtags, start - g0, end - g0,
                                peak_abs - g0, cam, disc or {}, used_hooks, score,
                                {"start_sec": start, "end_sec": end, "source": "auto-detected"})

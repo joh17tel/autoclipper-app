@@ -237,5 +237,18 @@ def _fps(path: str) -> int:
         return 30
 
 
+def keep_segments(src: str, segs: list[tuple[float, float]], dst: str) -> None:
+    """Join only the listed parts of a clip (used to cut out dead air)."""
+    parts, labels = [], ""
+    for i, (a, b) in enumerate(segs):
+        parts.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}];"
+                     f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        labels += f"[v{i}][a{i}]"
+    fc = ";".join(parts) + f";{labels}concat=n={len(segs)}:v=1:a=1[v][a]"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-filter_complex", fc,
+                    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "16", "-c:a", "aac", "-b:a", "192k", dst], check=True)
+
+
 def ffmpeg_ok() -> bool:
     return shutil.which("ffmpeg") is not None

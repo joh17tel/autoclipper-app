@@ -49,9 +49,14 @@ posting_audience: "US"        # US = schedule for US evenings (your mornings) | 
 posts_per_day: 3
 
 # ---- Clip shape ----
-# Short wins: 11–20s Shorts get the most median views. Build-up + payoff + reaction.
-clip_before_peak: 12        # seconds kept before the hype moment (the build-up)
-clip_after_peak: 6          # seconds kept after it (the reaction) — end right after the payoff
+# Clips grow with the action: a short spike gets a short clip, a long fight gets up to 30s.
+max_clip_seconds: 30        # hard cap (a campaign brief can make it shorter)
+clip_before_peak: 18        # most build-up kept before the hype moment
+clip_after_peak: 9          # most reaction kept after it
+min_build_up: 10            # always keep at least this much setup
+min_reaction: 5             # always keep at least this much reaction
+cut_dead_air: true          # remove quiet stretches (no talking, no action) to keep the pace up
+dead_air_seconds: 1.2       # a quiet stretch must be this long to be cut
 min_gap_between_clips: 90   # seconds; stops two clips showing the same moment
 use_chat: true              # also use chat spam to find moments (Twitch/YouTube)
 

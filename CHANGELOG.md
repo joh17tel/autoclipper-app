@@ -1,5 +1,14 @@
 # What's new
 
+## v6.3.0 — Longer, fuller clips
+- Clips now grow with the action, up to 30 seconds: a quick spike gets ~16s, a long fight gets the whole
+  thing (build-up + every big beat + the full reaction)
+- Picks moments with several exciting beats over a single loud spike
+- Cuts dead air (quiet stretches with no talking and no action) inside clips to keep the pace up;
+  the pause right before the big moment is kept for suspense
+- Campaign briefs still win: "under 15s" or "at least 20s" are respected
+- New Settings: longest clip length, dead-air cutting
+
 ## v6.2.0
 - Half viewer picks, half deeper cuts: fewer duplicate-content flags (everyone clips the #1 moment)
 - Skips the week's single most-viewed viewer clip by default (the one every clipper posts)

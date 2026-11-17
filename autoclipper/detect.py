@@ -60,7 +60,8 @@ def clip_count(duration_s: int, per_hour: float, lo: int, hi: int) -> int:
 
 def find_highlights(audio: np.ndarray, chat: np.ndarray | None, n: int,
                     before: int, after: int, min_gap: int,
-                    min_score: float = 1.5, extra: np.ndarray | None = None) -> list[tuple[int, int, float]]:
+                    min_score: float = 1.5, extra: np.ndarray | None = None, max_len: float = 30,
+                    min_before: int = 8, min_after: int = 4) -> list[tuple[int, int, float, int]]:
     """Return up to n (start, end, score) windows, best first, non-overlapping."""
     dur = len(audio)
     if dur == 0:
@@ -76,22 +77,69 @@ def find_highlights(audio: np.ndarray, chat: np.ndarray | None, n: int,
         ex = (ex - ex.mean()) / (ex.std() + 1e-6)   # viewers re-watching = proven moment
         score = 0.55 * score + 0.45 * ex
 
+    return pick_windows(score, n, before, after, min_gap, min_score, max_len, min_before, min_after)
+
+
+def pick_windows(score: np.ndarray, n: int, max_before: int, max_after: int, min_gap: int,
+                 min_score: float, max_len: float = 30, min_before: int = 8,
+                 min_after: int = 4) -> list[tuple[int, int, float, int]]:
+    """Build each clip around its peak, but let it GROW while the action stays above normal:
+    keeps the whole build-up and the full reaction (up to max_len), and prefers windows with
+    several exciting beats over a single loud spike. Returns (start, end, quality, peak)."""
+    dur = len(score)
     order = np.argsort(score)[::-1]
-    picks: list[tuple[int, int, float]] = []
-    peaks: list[int] = []
-    for peak in order:
+    cands = []
+    used_peaks: list[int] = []
+    for peak in order[: max(60, n * 12)]:
+        peak = int(peak)
+        if score[peak] < min_score:
+            break
+        if any(abs(peak - p) < 6 for p in used_peaks):
+            continue  # same moment
+        used_peaks.append(peak)
+        s0 = max(0, peak - min_before)
+        e0 = min(dur, peak + min_after)
+        # grow backwards through the build-up while it's clearly above normal
+        # (short dips of up to 2s are allowed: a pause before the play is part of it)
+        lo_lim, dip = max(0, peak - max_before), 0
+        i = s0 - 1
+        while i >= lo_lim:
+            dip = 0 if score[i] > 0.35 else dip + 1
+            if dip > 2:
+                break
+            if dip == 0:
+                s0 = i
+            i -= 1
+        # grow forwards through the reaction the same way
+        hi_lim, dip = min(dur, peak + max_after), 0
+        i = e0
+        while i < hi_lim:
+            dip = 0 if score[i] > 0.35 else dip + 1
+            if dip > 2:
+                break
+            if dip == 0:
+                e0 = i + 1
+            i += 1
+        # respect the overall length cap (trim the build-up first, keep the reaction)
+        while e0 - s0 > max_len and s0 < peak - min_before:
+            s0 += 1
+        while e0 - s0 > max_len and e0 > peak + min_after:
+            e0 -= 1
+        if e0 - s0 < 10:
+            continue
+        w = score[s0:e0]
+        beats = int(np.sum(w > 1.5))                 # how many exciting seconds
+        body = float(np.mean(np.sort(w)[-max(3, len(w) // 3):]))   # how strong the best third is
+        quality = 0.55 * float(score[peak]) + 0.30 * body + 0.15 * min(beats, 8)
+        cands.append((s0, e0, quality, peak))
+    cands.sort(key=lambda c: c[2], reverse=True)
+    picks: list[tuple[int, int, float, int]] = []
+    for c in cands:
         if len(picks) >= n:
             break
-        if score[peak] < min_score:  # nothing unusual left
-            break
-        if any(abs(int(peak) - p) < min_gap for p in peaks):
-            continue
-        start = max(0, int(peak) - before)
-        end = min(dur, int(peak) + after)
-        if end - start < 10:
-            continue
-        peaks.append(int(peak))
-        picks.append((start, end, float(score[peak])))
+        if any(not (c[1] + min_gap / 3 <= p[0] or c[0] >= p[1] + min_gap / 3) for p in picks):
+            continue  # overlaps a better clip
+        picks.append(c)
     return picks
 
 
@@ -104,3 +152,14 @@ def heatmap_per_second(heatmap: list | None, duration: int) -> np.ndarray | None
         a, b = int(h.get("start_time", 0)), int(h.get("end_time", 0))
         arr[max(0, a):min(duration, max(b, a + 1))] = float(h.get("value", 0))
     return arr
+
+
+def silences(path: str, noise_db: int = -38, min_len: float = 1.2) -> list[tuple[float, float]]:
+    """Quiet stretches (no talking, no game action) inside a clip."""
+    import re
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-i", path, "-af",
+                          f"silencedetect=noise={noise_db}dB:d={min_len}", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", out)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", out)]
+    return list(zip(starts, ends))
