@@ -180,7 +180,8 @@ def parse_brief(text: str) -> dict:
     # source channels (only stream/VOD sites)
     srcs = []
     for u in re.findall(r"https?://[^\s<>\"')]+", t):
-        if re.search(r"twitch\.tv|kick\.com|youtube\.com/@|youtube\.com/(c|channel)/", u):
+        if re.search(r"twitch\.tv|kick\.com|youtube\.com/@|youtube\.com/(c|channel|user)/|"
+                     r"youtube\.com/(watch|live|shorts)|youtu\.be/", u):
             v = _vod_url(u)
             if v not in srcs:
                 srcs.append(v)

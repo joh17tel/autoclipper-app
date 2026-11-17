@@ -411,7 +411,17 @@ def build_jobs(cfg, include_disabled=False):
     return jobs
 
 
-def run_job(job, state, out_dir):
+def run_job(job, state, out_dir, budget=1):
+    """Do up to `budget` new streams (or one viewer-clip batch per streamer) for this campaign,
+    then return so the next campaign gets its turn. Returns True if work is left over."""
+    left = {"n": budget, "more": False}
+
+    def take():
+        if left["n"] <= 0:
+            left["more"] = True
+            return False
+        left["n"] -= 1
+        return True
     m, jname = job["cfg"], job["name"]
     tmp = "temp"
     base = os.path.join(out_dir, safe(jname))
@@ -424,11 +434,13 @@ def run_job(job, state, out_dir):
         m = job["cfg"]  # fresh settings for every streamer
         tags = campaign.campaign_tags(m, ch.get("hashtags", ""))
         # 1a) Twitch: clips the streamer's viewers already made = human-picked best moments
-        if m.get("use_viewer_clips", True) and sources.twitch_login(ch["url"]):
+        if m.get("use_viewer_clips", True) and sources.twitch_login(ch["url"]) \
+                and not ch.get("_vclips_done") and take():
             share = float(m.get("viewer_clip_share", 0.5))
             mv = dict(m)
             mv["max_clips_per_stream"] = max(1, round(int(m.get("max_clips_per_stream", 12)) * share))
             made_v, total_v = clip_viewer_clips(mv, ch, jname, state, base, tags, disclosure_for(m, ch))
+            ch["_vclips_done"] = True   # once per round
             gallery.build(out_dir)
             if total_v and m.get("prefer_viewer_clips", False):
                 continue  # viewer clips only
@@ -452,6 +464,9 @@ def run_job(job, state, out_dir):
             if key in state["done_vods"]:
                 continue
             new_found = True
+            if not take():
+                log(f"[{jname}] {cname}: another new stream is queued - other campaigns go first")
+                break
             try:
                 info = sources.vod_info(v["url"])
             except Exception as e:
@@ -481,7 +496,7 @@ def run_job(job, state, out_dir):
                 log(f"   failed, will retry next round: {short_err(e)}")
             save_state(state)
             gallery.build(out_dir)
-        if vods and not new_found:
+        if vods and not new_found and left["n"] > 0:
             log(f"[{jname}] {cname}: no new streams - latest ones are already clipped. Waiting for the next stream.")
 
     if not job["channels"] and not job["footage"]:
@@ -495,6 +510,8 @@ def run_job(job, state, out_dir):
         key = f"{jname}:file:{os.path.basename(f)}:{int(os.path.getmtime(f))}"
         if key in state["done_vods"]:
             continue  # already clipped
+        if not take():
+            break
         log(f"[{jname}] campaign footage: {os.path.basename(f)}")
         name = (job["channels"][0].get("name") if job["channels"] else None) or job.get("subject") or jname
         stream_dir = os.path.join(base, f"footage_{safe(os.path.splitext(os.path.basename(f))[0])}")
@@ -509,6 +526,7 @@ def run_job(job, state, out_dir):
             log(f"   failed: {e}")
         save_state(state)
         gallery.build(out_dir)
+    return left["more"]
 
 
 # ---------------------------------------------------------------- run
@@ -563,8 +581,11 @@ def main():
             jobs = build_jobs(cfg)  # re-read so new briefs/campaigns are picked up
             if not jobs:
                 log("No campaigns or channels yet. Add a folder in 'campaigns' (see SETUP.md).")
-            for job in jobs:
-                run_job(job, state, out_dir)
+            more = True
+            while more and not should_stop():   # round-robin: one stream per campaign per pass
+                more = False
+                for job in jobs:
+                    more = bool(run_job(job, state, out_dir)) or more
         except KeyboardInterrupt:
             raise
         except Exception as e:

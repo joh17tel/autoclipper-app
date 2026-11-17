@@ -1,5 +1,10 @@
 # What's new
 
+## v6.3.1
+- Campaigns now take turns: one stream per campaign at a time, so a new campaign no longer waits
+  behind a long stream from another campaign
+- Briefs with single-video links now work (YouTube watch/live/youtu.be links, Twitch and Kick VOD links)
+
 ## v6.3.0 — Longer, fuller clips
 - Clips now grow with the action, up to 30 seconds: a quick spike gets ~16s, a long fight gets the whole
   thing (build-up + every big beat + the full reaction)

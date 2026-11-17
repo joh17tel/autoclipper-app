@@ -86,10 +86,13 @@ class Engine:
                 jobs = core.build_jobs(cfg)
                 if not jobs:
                     self.log("No campaigns yet. Add one in the Campaigns tab.")
-                for job in jobs:
-                    if self._stop.is_set():
-                        break
-                    core.run_job(job, state, out_dir)
+                more = True
+                while more and not self._stop.is_set():   # each campaign gets a turn
+                    more = False
+                    for job in jobs:
+                        if self._stop.is_set():
+                            break
+                        more = bool(core.run_job(job, state, out_dir)) or more
                 core.gallery.build(out_dir)
             except Exception as e:
                 self.log(f"error: {e}")
