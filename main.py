@@ -203,7 +203,8 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
         src, peak_t = opened, peak_t + added
 
     meta = copywriter.write_copy(streamer, words, peak_t, hashtags, seed=f"{cdir}",
-                                 used=used_hooks, disclosure_tag=disc_tag, hook_hint=hook_hint)
+                                 used=used_hooks, disclosure_tag=disc_tag, hook_hint=hook_hint,
+                                 question=cfg.get("comment_question", True))
     ass = os.path.join(cdir, "captions.ass")
     temps.append(ass)
     render.write_ass(words, ass, meta["hook"] if cfg.get("hook_on_video", True) else None,
@@ -292,6 +293,10 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
     min_views = int(cfg.get("viewer_clips_min_views", 25))
     fresh = [c for c in clips if (c.get("view_count") or 0) >= min_views
              and f"{m_name}:vclip:{c['id']}" not in state["done_vods"]]
+    # the #1-2 clips of the week are what every clipper posts; start a little deeper to stand out
+    skip_top = int(cfg.get("skip_top_viewer_clips", 1))
+    if len(fresh) > skip_top + 2:
+        fresh = fresh[skip_top:] + fresh[:skip_top]
     limit = int(cfg.get("max_clips_per_stream", 12))
     if not clips:
         return 0, 0
@@ -369,13 +374,22 @@ def run_job(job, state, out_dir):
         if not ch.get("url"):
             continue
         cname = ch.get("name") or jname
+        m = job["cfg"]  # fresh settings for every streamer
         tags = campaign.campaign_tags(m, ch.get("hashtags", ""))
         # 1a) Twitch: clips the streamer's viewers already made = human-picked best moments
         if m.get("use_viewer_clips", True) and sources.twitch_login(ch["url"]):
-            made_v, total_v = clip_viewer_clips(m, ch, jname, state, base, tags, disclosure_for(m, ch))
+            share = float(m.get("viewer_clip_share", 0.5))
+            mv = dict(m)
+            mv["max_clips_per_stream"] = max(1, round(int(m.get("max_clips_per_stream", 12)) * share))
+            made_v, total_v = clip_viewer_clips(mv, ch, jname, state, base, tags, disclosure_for(m, ch))
             gallery.build(out_dir)
-            if total_v and m.get("prefer_viewer_clips", True):
-                continue  # viewer clips exist -> skip guessing moments from the VOD
+            if total_v and m.get("prefer_viewer_clips", False):
+                continue  # viewer clips only
+            if total_v:
+                # the rest come from deeper cuts in the full stream: moments other clippers miss
+                m = dict(m)
+                m["max_clips_per_stream"] = max(2, round(int(m.get("max_clips_per_stream", 12)) * (1 - share)))
+                m["min_clips_per_stream"] = min(int(m.get("min_clips_per_stream", 3)), m["max_clips_per_stream"])
         try:
             vods = sources.latest_vods(ch["url"], m.get("latest_vods_to_check", 2))
         except Exception as e:
@@ -426,6 +440,7 @@ def run_job(job, state, out_dir):
     if not job["channels"] and not job["footage"]:
         log(f"[{jname}] nothing to clip yet - add stream links to the brief or upload footage")
 
+    m = job["cfg"]
     # 2) footage the campaign gave you (materials/footage)
     for f in job["footage"]:
         if should_stop():

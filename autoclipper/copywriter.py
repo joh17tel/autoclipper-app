@@ -34,6 +34,17 @@ TITLE_TEMPLATES = [
     "{s} reacts: {quote}",
 ]
 
+QUESTIONS = [
+    "Rate this play 1-10 👇",
+    "What would you have done here? 👇",
+    "Clean or lucky? 👇",
+    "Who else saw this live? 👇",
+    "Best moment of the stream? 👇",
+    "Would you have clutched this? 👇",
+    "{s} fans, where you at? 👇",
+    "Fair or not? Comment 👇",
+]
+
 EMOJI = ["😳", "💀", "🔥", "😂", "🤯", "😭"]
 
 
@@ -61,7 +72,7 @@ def quote_near_peak(words: list[dict], peak_t: float, span: float = 4.0, max_wor
 
 def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
                seed: str, used: set | None = None, disclosure_tag: str = "",
-               hook_hint: str | None = None) -> dict:
+               hook_hint: str | None = None, question: bool = True) -> dict:
     """used: hooks already given to other clips of this stream (avoids repeats)."""
     rnd = random.Random(seed)  # same clip -> same text if re-run
     used = used if used is not None else set()
@@ -90,9 +101,11 @@ def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
 
     youtube_title = f"{title} #shorts"[:100]
     lead = f"{disclosure_tag.strip()} " if disclosure_tag.strip() else ""
+    q = rnd.choice(QUESTIONS).format(s=streamer) if question else ""
     youtube_desc = (f"{lead}{streamer} stream highlight {rnd.choice(EMOJI)}\n"
-                    f"Full stream on {streamer}'s channel.\n\n{tags} #shorts #gaming #streamer")
-    tiktok_caption = f"{lead}{title} {tags} #gaming #fyp #streamer"[:2000]
+                    + (f"{q}\n" if q else "")
+                    + f"Full stream on {streamer}'s channel.\n\n{tags} #shorts #gaming #streamer")
+    tiktok_caption = (f"{lead}{title}" + (f" {q}" if q else "") + f" {tags} #gaming #fyp #streamer")[:2000]
     return {
         "hook": hook,
         "quote": quote,

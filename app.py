@@ -138,8 +138,8 @@ def status():
     return jsonify({
         **ENGINE.status(),
         "clips_total": len(ids),
-        "clips_ready": len([i for i in ids if not posted.get(i)]),
-        "clips_posted": len([i for i in ids if posted.get(i)]),
+        "clips_ready": len([i for i in ids if posted.get(i) is not True]),
+        "clips_posted": len([i for i in ids if posted.get(i) is True]),
         "campaigns": len(campaign.discover(c.get("campaigns_folder", "campaigns"))),
         "phone_url": f"http://{lan_ip()}:{PORT}" if phone and lan_ip() else None,
         "check_every": c.get("check_every_minutes", 30),
@@ -172,20 +172,101 @@ def clips():
         except Exception:
             continue
         cid = os.path.relpath(os.path.dirname(mp), base).replace("\\", "/")
-        m.update({"id": cid, "posted": bool(posted.get(cid)),
+        m.update({"id": cid, "posted": _is_done(posted.get(cid), m.get("platforms") or ["tiktok", "youtube"]),
+                  "posted_on": posted.get(cid) if isinstance(posted.get(cid), dict) else {},
                   "video": f"/media/{cid}/clip.mp4", "thumb": f"/media/{cid}/thumbnail.jpg"})
         items.append(m)
     items.sort(key=lambda m: (m.get("created", ""), m.get("score", 0)), reverse=True)
     return jsonify(items)
 
 
+def _is_done(val, plats):
+    if val is True:
+        return True
+    if isinstance(val, dict):
+        return all(val.get(x) for x in plats)
+    return False
+
+
 @app.post("/api/clips/posted")
 def mark_posted():
+    """{id, posted} marks the whole clip; {id, platform, posted} marks one platform."""
     data = request.get_json(force=True)
     p = load_posted()
-    p[data["id"]] = bool(data.get("posted", True))
+    cid, plat = data["id"], data.get("platform")
+    if plat:
+        cur = p.get(cid)
+        cur = {} if not isinstance(cur, dict) else cur
+        cur[plat] = bool(data.get("posted", True))
+        p[cid] = cur
+        try:  # all allowed platforms done -> the clip counts as posted
+            with open(os.path.join(inside(out_dir(), cid), "meta.json"), encoding="utf-8") as f:
+                plats = json.load(f).get("platforms") or ["tiktok", "youtube"]
+            if all(cur.get(x) for x in plats):
+                p[cid] = True
+        except Exception:
+            pass
+    else:
+        p[cid] = bool(data.get("posted", True))
     save_posted(p)
     return jsonify({"ok": True})
+
+
+@app.get("/api/plan")
+def posting_plan():
+    """Today's plan: best unposted clips, staggered per platform (Reels first, TikTok 2-3h later)."""
+    from datetime import datetime, timedelta
+    c = cfg()
+    n = int(c.get("posts_per_day", 3))
+    audience = str(c.get("posting_audience", "US")).upper()
+    first_hour = 8 if audience == "US" else 18          # PH time: 8 AM = 7 PM New York
+    base = out_dir()
+    posted = load_posted()
+    viewer, auto = [], []
+    for mp in glob.glob(os.path.join(base, "**", "meta.json"), recursive=True):
+        try:
+            with open(mp, encoding="utf-8") as f:
+                m = json.load(f)
+        except Exception:
+            continue
+        cid = os.path.relpath(os.path.dirname(mp), base).replace("\\", "/")
+        plats = m.get("platforms") or ["tiktok", "youtube"]
+        if _is_done(posted.get(cid), plats):
+            continue
+        m.update({"id": cid, "thumb": f"/media/{cid}/thumbnail.jpg", "video": f"/media/{cid}/clip.mp4",
+                  "done": posted.get(cid) if isinstance(posted.get(cid), dict) else {}})
+        (viewer if m.get("source") == "viewer clip" else auto).append(m)
+    viewer.sort(key=lambda m: m.get("source_views") or 0, reverse=True)
+    auto.sort(key=lambda m: m.get("score") or 0, reverse=True)
+    picks = []
+    while (viewer or auto) and len(picks) < n:   # alternate viewer picks and deeper cuts
+        for group in (viewer, auto):
+            if group and len(picks) < n:
+                picks.append(group.pop(0))
+    now = datetime.now()
+    start = now.replace(hour=first_hour, minute=0, second=0, microsecond=0)
+    day = "Today"
+    if now > start + timedelta(hours=n + 3):
+        start += timedelta(days=1)
+        day = "Tomorrow"
+    order = [("instagram", 0), ("tiktok", 150), ("youtube", 180)]   # minutes after the slot
+    plan = []
+    for i, m in enumerate(picks):
+        slot = start + timedelta(hours=i)
+        plats = m.get("platforms") or ["tiktok", "youtube"]
+        steps, offset0 = [], None
+        for plat, mins in order:
+            if plat not in plats:
+                continue
+            if offset0 is None:
+                offset0 = mins
+            t = slot + timedelta(minutes=mins - offset0)
+            steps.append({"platform": plat, "time": t.strftime("%I:%M %p").lstrip("0"),
+                          "done": bool(m["done"].get(plat))})
+        plan.append({k: m.get(k) for k in ("id", "hook", "campaign", "thumb", "video", "youtube_title",
+                                           "youtube_description", "tiktok_caption", "source", "source_views",
+                                           "length_sec")} | {"steps": steps})
+    return jsonify({"day": day, "audience": audience, "plan": plan})
 
 
 @app.post("/api/clips/delete")

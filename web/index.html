@@ -125,6 +125,9 @@ nav button{width:auto}.navfoot,.brand{display:none}.tiles{grid-template-columns:
     <button class="btn sm" id="bRefreshClips">↻ Refresh</button>
     <span class="meta" id="clipCount"></span>
   </div>
+  <div class="panel" id="planBox"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📅 Posting plan <span class="meta" id="planDay"></span></h2>
+    <span class="hint">Instagram first, TikTok 2½h later, YouTube after. Same clip close together on two apps gets pushed down.</span></div>
+    <div id="planList" style="margin-top:10px"></div></div>
   <div class="grid" id="clipGrid"></div>
 </section>
 
@@ -215,7 +218,21 @@ $("#bClearLog").onclick=()=>$("#log").innerHTML="";
 
 /* clips */
 let CLIPS=[];
-async function loadClips(quiet){CLIPS=await api("/api/clips");const camps=[...new Set(CLIPS.map(c=>c.campaign||"General"))];
+const PLAT={instagram:"📸 Instagram",tiktok:"🎵 TikTok",youtube:"▶ YouTube"};
+async function loadPlan(){try{const p=await api("/api/plan");$("#planDay").textContent=`· ${p.day} · for ${p.audience} viewers (your time)`;
+  if(!p.plan.length){$("#planList").innerHTML='<div class="meta">Nothing left to post. New clips will show up here.</div>';return}
+  $("#planList").innerHTML=p.plan.map((c,i)=>`<div class="row" style="align-items:flex-start;gap:12px;padding:10px 0;border-top:1px solid var(--line)" data-i="${i}">
+    <img src="${c.thumb}" style="width:54px;aspect-ratio:9/16;object-fit:cover;border-radius:6px">
+    <div style="flex:1;min-width:220px"><div class="hook" style="font-size:14px">${i+1}. ${esc(c.hook)}</div>
+      <div class="meta">${esc(c.campaign)} · ${esc(c.length_sec)}s${c.source==="viewer clip"?" · 👥 viewer pick":" · deep cut"}</div>
+      <div class="row" style="margin-top:6px"><a class="btn sm" href="${c.video}?dl=1">⬇ Video</a></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px">${c.steps.map(st=>`<label class="row" style="gap:8px;font-size:13px">
+      <input type="checkbox" data-p="${st.platform}" ${st.done?"checked":""}> <b style="width:70px">${st.time}</b> ${PLAT[st.platform]||st.platform}
+      <button class="btn sm" data-copy="${st.platform}">Copy caption</button></label>`).join("")}</div></div>`).join("");
+  $$("#planList [data-i]").forEach(row=>{const c=p.plan[+row.dataset.i];
+    row.querySelectorAll("input[data-p]").forEach(cb=>cb.onchange=async()=>{await post("/api/clips/posted",{id:c.id,platform:cb.dataset.p,posted:cb.checked});toast(cb.checked?"Marked posted":"Unmarked");status();loadClips(true)});
+    row.querySelectorAll("[data-copy]").forEach(b=>b.onclick=e=>{e.preventDefault();copy(b.dataset.copy==="youtube"?c.youtube_title+"\n\n"+c.youtube_description:c.tiktok_caption)})})}catch(e){}}
+async function loadClips(quiet){if(!quiet)loadPlan();CLIPS=await api("/api/clips");const camps=[...new Set(CLIPS.map(c=>c.campaign||"General"))];
   const sel=$("#fCamp"),cur=sel.value;sel.innerHTML='<option value="">All campaigns</option>'+camps.map(c=>`<option>${esc(c)}</option>`).join("");
   sel.value=camps.includes(cur)?cur:"";renderClips()}
 $("#fCamp").onchange=renderClips;$("#fShow").onchange=renderClips;$("#bRefreshClips").onclick=()=>loadClips();
@@ -245,7 +262,7 @@ function renderClips(){const camp=$("#fCamp").value,showMode=$("#fShow").value;
     const a=b.dataset.a;
     if(a==="yt")copy(c.youtube_title);if(a==="yd")copy(c.youtube_description);if(a==="tt")copy(c.tiktok_caption);
     if(a==="open")post("/api/clips/open",{id:c.id});
-    if(a==="posted"){await post("/api/clips/posted",{id:c.id,posted:!c.posted});c.posted=!c.posted;renderClips();status()}
+    if(a==="posted"){await post("/api/clips/posted",{id:c.id,posted:!c.posted});c.posted=!c.posted;renderClips();status();loadPlan()}
     if(a==="del"&&confirm("Delete this clip from your PC?")){await post("/api/clips/delete",{id:c.id});CLIPS=CLIPS.filter(x=>x.id!==c.id);renderClips();status()}})})}
 
 /* campaigns */
@@ -366,6 +383,11 @@ const FIELDS=[
  ["whisper_model","select:tiny,base,small","Caption accuracy (small = best for GTX 1660 Super)"],
  ["output_folder","text","Clips folder (e.g. G:/My Drive/Clips to reach them from your phone)"],
  ["update_repo","text","Update source (GitHub owner/repo)"],
+ ["posting_audience","select:US,PH","Posting plan times for (US = your mornings, PH = your evenings)"],
+ ["posts_per_day","number","Clips in the daily posting plan"],
+ ["viewer_clip_share","select:0.25,0.5,0.75,1","Share of clips from viewer-made Twitch clips (rest = deeper cuts)"],
+ ["comment_question","bool","Add a question to captions to get comments"],
+ ["use_viewer_clips","bool","Use viewer-made Twitch clips"],
  ["captions","bool","Auto-captions on videos"],["hook_on_video","bool","Title bar hook (first 3 seconds)"],
  ["cold_open","bool","Cold open (flash the payoff first)"],["zoom_on_peak","bool","Punch-in zoom on hype moment"],
  ["use_chat","bool","Use chat activity to find moments"],["cleanup_sources","bool","Delete downloaded stream audio after clipping"],

@@ -1,5 +1,13 @@
 # What's new
 
+## v6.2.0
+- Half viewer picks, half deeper cuts: fewer duplicate-content flags (everyone clips the #1 moment)
+- Skips the week's single most-viewed viewer clip by default (the one every clipper posts)
+- Posting plan in Clips: best clips to post today, Instagram first then TikTok 2.5h later then YouTube,
+  timed for US evenings (your mornings) or PH evenings - tick each platform as you post
+- Captions now end with a question ("Rate this play 1-10") to get comments
+- New Settings: posting audience, posts per day, viewer-clip share, caption questions
+
 ## v6.1.0 — Quality upgrade
 - Twitch: uses the clips the streamer's own viewers made (the most-viewed ones) as the source of moments,
   instead of guessing from loudness. Their clip title becomes the hook. Tagged "viewer pick" in Clips.

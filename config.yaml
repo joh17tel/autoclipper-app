@@ -36,10 +36,17 @@ max_clips_per_stream: 12
 
 # ---- Where moments come from ----
 use_viewer_clips: true        # Twitch: use clips the streamer's viewers made (human-picked = best quality)
-prefer_viewer_clips: true     # if viewer clips exist, skip guessing moments from the full stream
+prefer_viewer_clips: false    # true = viewer clips ONLY (more duplicate risk: everyone clips the same moments)
+viewer_clip_share: 0.5        # half viewer picks, half deeper cuts from the full stream
+skip_top_viewer_clips: 1      # start below the week's #1 clip (the one every clipper posts)
 viewer_clips_range: "7d"      # 24hr / 7d / 30d
 viewer_clips_min_views: 25    # ignore viewer clips with fewer views than this
 normalize_audio: true         # even out loudness to -14 LUFS (TikTok/Shorts standard)
+
+# ---- Posting ----
+comment_question: true        # add a question to captions ("Rate this play 1-10") to get comments
+posting_audience: "US"        # US = schedule for US evenings (your mornings) | PH = Philippine evenings
+posts_per_day: 3
 
 # ---- Clip shape ----
 # Short wins: 11–20s Shorts get the most median views. Build-up + payoff + reaction.
