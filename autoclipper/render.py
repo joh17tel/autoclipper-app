@@ -147,10 +147,17 @@ def _watermark(wm: dict | None) -> str:
 
 
 def build_filter(w: int, h: int, cam: tuple | None, peak: float | None,
-                 ass_path: str | None, thumb: bool = False, wm: dict | None = None) -> str:
+                 ass_path: str | None, thumb: bool = False, wm: dict | None = None,
+                 follow_x: float | None = None) -> str:
     z = "1" if thumb else _zoom_expr(peak)
     pop = ",eq=contrast=1.12:saturation=1.3,unsharp=5:5:0.8" if thumb else ""
-    if cam:
+    if follow_x is not None and not cam and w / h > 0.75:
+        # IRL / talk: fill the whole screen with the person (crop around their face)
+        cw = int(h * 9 / 16) // 2 * 2
+        x = int(min(max(follow_x * w - cw / 2, 0), w - cw)) // 2 * 2
+        vf = (f"[0:v]crop={cw}:{h}:{x}:0,scale=1080:1920,unsharp=3:3:0.4"
+              f"{_scale_zoom(1080, 1920, z)}{pop}")
+    elif cam:
         x, y, cw, chh = cam
         target = 1080 / GAME_H
         gw = min(w, int(h * target)) // 2 * 2
@@ -178,12 +185,12 @@ def build_filter(w: int, h: int, cam: tuple | None, peak: float | None,
 
 def make_vertical(src: str, dst: str, ass_path: str | None = None,
                   cam: tuple | None = None, peak: float | None = None,
-                  wm: dict | None = None) -> None:
+                  wm: dict | None = None, follow_x: float | None = None) -> None:
     from .layout import probe_size
     w, h = probe_size(src)
     if wm and not os.path.exists(wm.get("file", "")):
         wm = None
-    vf = build_filter(w, h, cam, peak, ass_path, wm=wm)
+    vf = build_filter(w, h, cam, peak, ass_path, wm=wm, follow_x=follow_x)
     logo_in = ["-loop", "1", "-i", wm["file"]] if wm else []
     # gaming looks best at the source's 60fps; high quality, platform-friendly bitrate
     enc = (["-c:v", "h264_nvenc", "-preset", "p6", "-rc", "vbr", "-cq", "20",
@@ -195,10 +202,11 @@ def make_vertical(src: str, dst: str, ass_path: str | None = None,
                     "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", dst], check=True)
 
 
-def make_thumbnail(src: str, t: float, dst: str, ass_path: str, cam: tuple | None = None) -> None:
+def make_thumbnail(src: str, t: float, dst: str, ass_path: str, cam: tuple | None = None,
+                   follow_x: float | None = None) -> None:
     from .layout import probe_size
     w, h = probe_size(src)
-    vf = build_filter(w, h, cam, None, ass_path, thumb=True)
+    vf = build_filter(w, h, cam, None, ass_path, thumb=True, follow_x=follow_x)
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{max(t, 0):.2f}", "-i", src,
                     "-filter_complex", vf, "-map", "[v]", "-frames:v", "1", "-q:v", "2", dst],
                    check=True)

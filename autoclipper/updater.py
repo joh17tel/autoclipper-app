@@ -13,7 +13,7 @@ import sys
 import urllib.request
 import zipfile
 
-KEEP = {"config.yaml", "campaigns", "clips", "state.json", "posted.json", ".venv", "temp",
+KEEP = {"config.yaml", "campaigns", "clips", "state.json", "posted.json", ".venv", "temp", "hooks_history.json",
         "doctor_report.txt", "app_error.txt", "youtube_token.json", "client_secret.json", ".git"}
 UA = {"User-Agent": "AutoClipper-updater"}
 

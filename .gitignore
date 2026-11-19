@@ -11,3 +11,4 @@ client_secret.json
 campaigns/*
 !campaigns/_TEMPLATE/
 !campaigns/_TEMPLATE/**
+hooks_history.json

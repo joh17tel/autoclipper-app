@@ -177,6 +177,15 @@ def parse_brief(text: str) -> dict:
     elif "sponsored" in low:
         out["disclosure_text"] = "Sponsored"
 
+    # what kind of content: IRL / talk / gaming
+    if re.search(r"\birl\b|in real life|real[- ]life|outdoor stream|out in public|street", low):
+        out["category"] = "irl"
+    elif re.search(r"podcast|just chatting|talk show|interview|react(ion)? (stream|content)", low):
+        out["category"] = "talk"
+    elif re.search(r"gaming|gameplay|fortnite|valorant|call of duty|warzone|cod\b|minecraft|gta|"
+                   r"apex|league of legends|cs2|counter[- ]strike|roblox|tournament|cdl", low):
+        out["category"] = "gaming"
+
     # source channels (only stream/VOD sites)
     srcs = []
     for u in re.findall(r"https?://[^\s<>\"')]+", t):
@@ -228,13 +237,20 @@ def build_campaign_yaml(folder: str) -> dict:
     name = os.path.basename(os.path.normpath(folder))
     text, brief_path = read_brief(folder)
     rules = parse_brief(text) if text else {}
-    data: dict = {"name": name, "enabled": True}
+    data: dict = {"name": name, "enabled": True,
+                  "category": rules.get("category", "gaming")}   # gaming | irl | talk
     # the name used in hooks/titles when clipping campaign footage (no streamer)
     first_tag = (rules.get("hashtags") or [None])[0]
     data["subject"] = first_tag.lstrip("#").capitalize() if first_tag else name.replace("_", " ")
 
-    data["streamers"] = [{"name": re.sub(r".*/(@?)([^/]+)/(videos|streams).*", r"\2", s) or name,
-                          "url": s, "facecam": "auto"} for s in rules.get("sources", [])]
+    def nice_name(url):
+        slug = re.sub(r".*/(@?)([^/?]+)/(videos|streams|clips).*", r"\2", url)
+        if slug == url:
+            slug = re.sub(r"^https?://[^/]+/@?([^/?]+).*", r"\1", url)
+        m = re.search(re.escape(slug), text or "", re.I)   # use the brief's capitalisation (JasonTheWeen)
+        found = [x for x in re.findall(r"[A-Za-z0-9_]+", text or "") if x.lower() == slug.lower() and x != x.lower()]
+        return found[0] if found else (m.group(0) if m else slug) or name
+    data["streamers"] = [{"name": nice_name(s), "url": s, "facecam": "auto"} for s in rules.get("sources", [])]
     if rules.get("hashtags"):
         data["hashtags"] = rules["hashtags"]
     if rules.get("mentions"):
@@ -265,10 +281,38 @@ def build_campaign_yaml(folder: str) -> dict:
         data["rules_to_follow_manually"] = rules["rules_to_follow_manually"]
     data["_brief"] = brief_path or "none found - add brief.txt"
     _write_yaml(os.path.join(folder, "campaign.yaml"), data)
+    data.update(get_overrides(folder))
     return data
 
 
+OVERRIDES = "overrides.json"
+
+
+def get_overrides(folder: str) -> dict:
+    import json
+    try:
+        with open(os.path.join(folder, OVERRIDES), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def set_override(folder: str, key: str, value) -> None:
+    """Choices made in the app (e.g. category) - kept even when the brief is re-read."""
+    import json
+    o = get_overrides(folder)
+    o[key] = value
+    with open(os.path.join(folder, OVERRIDES), "w", encoding="utf-8") as f:
+        json.dump(o, f, indent=1)
+
+
 def load_campaign(folder: str) -> dict:
+    data = _load_campaign_raw(folder)
+    data.update(get_overrides(folder))
+    return data
+
+
+def _load_campaign_raw(folder: str) -> dict:
     """Read campaign.yaml, (re)building it from the brief when needed."""
     y = os.path.join(folder, "campaign.yaml")
     newest = brief_mtime(folder)
@@ -284,9 +328,27 @@ def load_campaign(folder: str) -> dict:
         return yaml.safe_load(f) or {}
 
 
+CATEGORY_PRESETS = {
+    # IRL & talk: stories need more setup; the person fills the screen
+    "irl": {"min_build_up": 12, "clip_before_peak": 20, "clip_after_peak": 9, "use_chat": True},
+    "talk": {"min_build_up": 12, "clip_before_peak": 20, "clip_after_peak": 8, "use_chat": True},
+    "gaming": {},
+}
+
+
+def apply_category(m: dict, category: str, camp: dict) -> dict:
+    cat = category if category in CATEGORY_PRESETS else "gaming"
+    m["category"] = cat
+    for k, v in CATEGORY_PRESETS[cat].items():
+        if k not in camp:          # the campaign's own settings still win
+            m[k] = v
+    return m
+
+
 def merged_cfg(cfg: dict, camp: dict, folder: str) -> dict:
     """Global config + campaign overrides."""
     m = dict(cfg)
+    apply_category(m, camp.get("category") or cfg.get("default_category", "gaming"), camp)
     for k in ("captions", "hook_on_video", "zoom_on_peak", "cold_open", "clips_per_hour",
               "max_clips_per_stream", "min_clips_per_stream"):
         if k in camp:
@@ -305,12 +367,12 @@ def merged_cfg(cfg: dict, camp: dict, folder: str) -> dict:
         max_len = min(max_len, float(camp["target_seconds"]) + 2)   # match the example clips
     m["max_clip_seconds"] = max_len
     body = max(6.0, max_len - cold)
-    m["clip_before_peak"] = min(int(cfg["clip_before_peak"]), int(round(body * 0.67)))
-    m["clip_after_peak"] = min(int(cfg["clip_after_peak"]), max(3, int(round(body * 0.33))))
+    m["clip_before_peak"] = min(int(m["clip_before_peak"]), int(round(body * 0.67)))
+    m["clip_after_peak"] = min(int(m["clip_after_peak"]), max(3, int(round(body * 0.33))))
     if lo:  # make sure even the shortest clip meets the brief's minimum
         need = float(lo) + 1 - cold
-        m["min_build_up"] = max(int(cfg.get("min_build_up", 10)), int(round(need * 0.65)))
-        m["min_reaction"] = max(int(cfg.get("min_reaction", 5)), int(round(need * 0.35)) + 1)
+        m["min_build_up"] = max(int(m.get("min_build_up", 10)), int(round(need * 0.65)))
+        m["min_reaction"] = max(int(m.get("min_reaction", 5)), int(round(need * 0.35)) + 1)
         m["clip_before_peak"] = max(m["clip_before_peak"], m["min_build_up"])
         m["clip_after_peak"] = max(m["clip_after_peak"], m["min_reaction"])
 

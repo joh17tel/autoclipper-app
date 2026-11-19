@@ -87,3 +87,40 @@ def download_clip(url: str, out_path: str) -> str:
         path = ydl.prepare_filename(info)
     mp4 = base + ".mp4"
     return mp4 if os.path.exists(mp4) else path
+
+
+def kick_slug(url: str) -> str | None:
+    import re
+    m = re.match(r"https?://(?:www\.)?kick\.com/([\w-]+)", url or "")
+    return m.group(1).lower() if m and m.group(1).lower() not in ("video", "categories", "search") else None
+
+
+def kick_top_clips(channel_url: str, rng: str = "7d", limit: int = 40) -> list[dict]:
+    """Most-viewed clips Kick viewers made of this streamer."""
+    slug = kick_slug(channel_url)
+    if not slug:
+        return []
+    r = {"24hr": "day", "1d": "day", "7d": "week", "30d": "month", "all": "all"}.get(rng, "week")
+    url = f"https://kick.com/{slug}/clips?sort=view&range={r}"
+    opts = {"quiet": True, "extract_flat": True, "playlistend": limit, "skip_download": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    out = []
+    for e in (info.get("entries") or [])[:limit]:
+        if e and e.get("url"):
+            out.append({"id": str(e.get("id")), "url": e["url"], "title": e.get("title") or "",
+                        "view_count": e.get("view_count") or 0, "duration": e.get("duration") or 0})
+    out.sort(key=lambda c: c["view_count"], reverse=True)
+    return out
+
+
+def has_viewer_clips(url: str) -> bool:
+    return bool(twitch_login(url) or kick_slug(url))
+
+
+def top_viewer_clips(url: str, rng: str = "7d", limit: int = 40) -> list[dict]:
+    if twitch_login(url):
+        return twitch_top_clips(url, rng, limit)
+    if kick_slug(url):
+        return kick_top_clips(url, rng, limit)
+    return []

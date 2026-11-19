@@ -1,5 +1,18 @@
 # What's new
 
+## v6.4.0 — IRL streams + better hooks
+- Category per campaign: 🎮 Gaming, 🚶 IRL (e.g. JasonTheWeen), 🎙 Talk/podcast
+  - picked automatically from the brief, or choose it in the campaign page / new campaign form
+  - IRL & talk: the person fills the whole screen (crop follows their face), longer setup for stories,
+    IRL-style hooks, titles, questions and hashtags (#irl #irlstream)
+- Kick support for viewer clips: uses the most-viewed clips Kick viewers made (like Twitch)
+- Hooks no longer repeat: every hook is checked against your last 200 across all campaigns,
+  and the same opening ("STREAMER couldn't...") can't appear twice in a row
+- Hooks pull the punchiest real quote from the clip ("wait wait wait are you serious"),
+  shown in quotation marks; titles are now written differently from the on-screen hook
+- Much bigger hook banks (25+ per category)
+- Streamer names keep the brief's capitalisation (JasonTheWeen, not jasontheween)
+
 ## v6.3.1
 - Campaigns now take turns: one stream per campaign at a time, so a new campaign no longer waits
   behind a long stream from another campaign

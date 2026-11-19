@@ -83,3 +83,39 @@ def detect_facecam(path: str, samples: int = 12) -> tuple[int, int, int, int] | 
     x0 = min(max(cx - bw / 2, 0), W - bw)
     y0 = min(max(cy - bh * 0.45, 0), H - bh)
     return _even(x0), _even(y0), _even(min(bw, W)), _even(min(bh, H))
+
+
+def face_center_x(path: str, samples: int = 10) -> float | None:
+    """Where the main person is, left-to-right (0..1). Used to crop IRL/talk clips on the person."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None
+    cap = cv2.VideoCapture(path)
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    if total <= 0 or W == 0:
+        return None
+    try:
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    except Exception:
+        return None
+    if cascade.empty():
+        return None
+    xs, ws = [], []
+    for i in range(samples):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (i + 0.5) / samples))
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = cascade.detectMultiScale(g, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+        if len(faces):
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])   # biggest face = main person
+            xs.append((x + w / 2) / W)
+            ws.append(w)
+    cap.release()
+    if len(xs) < max(2, samples // 4):
+        return None
+    return float(np.median(xs))

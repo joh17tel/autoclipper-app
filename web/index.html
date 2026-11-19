@@ -246,7 +246,7 @@ function renderClips(){const camp=$("#fCamp").value,showMode=$("#fShow").value;
     const rules=(c.manual_rules||[]).length?`<details><summary>Brief rules to check (${c.manual_rules.length})</summary><ul>${c.manual_rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul></details>`:"";
     const disc=c.disclosure?`<div class="chk" style="color:var(--acc)">⚠ Turn on ${tt?"TikTok “Paid partnership”":""}${tt&&yt?" / ":""}${yt?"YouTube “Paid promotion”":""} when posting</div>`:"";
     return `<div class="card ${c.posted?"posted":""}" data-i="${i}">
-      <div class="row"><span class="tag">${esc(c.campaign||"General")}</span><span class="tag gray">${esc(c.layout||"")}</span><span class="tag gray">${esc(c.length_sec)}s</span>${c.source==="viewer clip"?`<span class="tag" style="background:#4ad07a">👥 viewer pick · ${esc(c.source_views)} views</span>`:""}</div>
+      <div class="row"><span class="tag">${esc(c.campaign||"General")}</span><span class="tag gray">${esc({gaming:"🎮",irl:"🚶",talk:"🎙"}[c.category]||"")} ${esc(c.layout||"")}</span><span class="tag gray">${esc(c.length_sec)}s</span>${c.source==="viewer clip"?`<span class="tag" style="background:#4ad07a">👥 viewer pick · ${esc(c.source_views)} views</span>`:""}</div>
       <div class="media"><video src="${c.video}" controls preload="metadata" poster="${c.thumb}"></video><img src="${c.thumb}" loading="lazy"></div>
       <div class="hook">${esc(c.hook)}</div>
       <div class="meta">${esc(c.channel)} · ${esc((c.created||"").replace("T"," "))} · score ${esc(c.score)}</div>
@@ -298,6 +298,9 @@ function renderCamp(folder){selCamp=folder;renderCampList();const c=CAMPS.find(x
   <div class="panel"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(d.name||folder)}</h2>
     <div class="row"><button class="btn sm" id="cToggle">${d.enabled===false?"▶ Enable":"⏸ Disable"}</button><button class="btn sm red" id="cDel">Delete</button></div></div>
     <p class="hint">What AutoClipper understood from the brief (${esc(c.brief_file||"no brief yet")}):</p>
+    <div class="row" style="margin:6px 0 12px"><b>Category:</b>
+      <select id="cCat" style="width:auto">${["gaming","irl","talk"].map(k=>`<option value="${k}" ${(d.category||"gaming")===k?"selected":""}>${{gaming:"🎮 Gaming",irl:"🚶 IRL",talk:"🎙 Talk / podcast"}[k]}</option>`).join("")}</select>
+      <span class="hint">Changes the layout, clip length and hook style.</span></div>
     <div class="kv">
       <div>Streamers watched</div><div>${(d.streamers||[]).map(s=>esc(s.name)+' <span class="meta">'+esc(s.url)+'</span>').join("<br>")||'<span class="meta">none — add stream links to the brief, or use footage</span>'}</div>
       <div>Hashtags / tags</div><div>${esc([...(d.hashtags||[]),...(d.mentions||[])].join(" "))||'<span class="meta">none found</span>'}</div>
@@ -331,6 +334,7 @@ function renderCamp(folder){selCamp=folder;renderCampList();const c=CAMPS.find(x
     <div class="row" style="margin-top:10px"><button class="btn" id="cSaveYaml">Save campaign.yaml</button>
     <span class="hint">Saving by hand stops automatic re-reads of the brief.</span></div></details></div>`;
   const F=encodeURIComponent(folder);
+  $("#cCat").onchange=async e=>{await post(`/api/campaigns/${F}/set`,{category:e.target.value});toast("Category saved - new clips use it");loadCamps()};
   $("#cToggle").onclick=async()=>{await post(`/api/campaigns/${F}/toggle`);loadCamps()};
   $("#cDel").onclick=async()=>{if(confirm("Delete this campaign folder (brief + materials)? Clips already made are kept.")){await post(`/api/campaigns/${F}/delete`);selCamp=null;$("#campDetail").innerHTML="";loadCamps();status()}};
   $("#cReparse").onclick=async()=>{const fd=new FormData();fd.append("brief",$("#briefText").value);
@@ -347,6 +351,9 @@ function renderCamp(folder){selCamp=folder;renderCampList();const c=CAMPS.find(x
 $("#bNewCamp").onclick=()=>{selCamp=null;renderCampList();$("#campDetail").innerHTML=`
   <div class="panel" id="newForm"><h2>New campaign</h2>
   <label class="f">Campaign name</label><input type="text" id="nName" placeholder="e.g. Clix Pool">
+  <label class="f">What kind of streams?</label><select id="nCat">
+    <option value="auto">Detect from the brief</option><option value="gaming">🎮 Gaming</option>
+    <option value="irl">🚶 IRL (real-life streams, e.g. JasonTheWeen)</option><option value="talk">🎙 Talk / podcast / just chatting</option></select>
   <label class="f">Full brief: copy everything from the Whop/Vyro campaign page and paste it here</label>
   <textarea id="nBrief" style="min-height:240px" placeholder="Rules, requirements, links, hashtags…"></textarea>
   <label class="f">…or upload the brief as PDF/DOCX</label><input type="file" id="nBriefFile" accept=".pdf,.docx,.txt,.md">
@@ -355,6 +362,7 @@ $("#bNewCamp").onclick=()=>{selCamp=null;renderCampList();$("#campDetail").inner
   <label class="f">Example clips they like (optional)</label><input type="file" id="nExamples" accept="video/*" multiple>
   <div class="row" style="margin-top:16px"><button class="btn pri" id="nCreate">Create campaign</button><span class="meta" id="nMsg"></span></div></div>`;
   $("#nCreate").onclick=async()=>{const fd=new FormData();fd.append("name",$("#nName").value);fd.append("brief",$("#nBrief").value);
+    if($("#nCat").value!=="auto")fd.append("category",$("#nCat").value);
     if($("#nBriefFile").files[0])fd.append("brief_file",$("#nBriefFile").files[0]);
     if($("#nLogo").files[0])fd.append("logo",$("#nLogo").files[0]);
     [...$("#nFootage").files].forEach(f=>fd.append("footage",f));[...$("#nExamples").files].forEach(f=>fd.append("examples",f));
@@ -378,6 +386,8 @@ $("#bRunTest").onclick=async()=>{const f=$("#testFile").files[0];if(!f){toast("C
 const FIELDS=[
  ["check_every_minutes","number","Check for new streams every (minutes)"],
  ["clips_per_hour","number","Clips per hour of stream"],
+ ["default_category","select:gaming,irl,talk","Default content type for new campaigns"],
+ ["irl_layout","select:follow,fit","IRL/talk layout (follow = crop on the person, fit = whole frame)"],
  ["max_clip_seconds","number","Longest clip (seconds) - clips grow with the action up to this"],
  ["cut_dead_air","bool","Cut quiet dead air inside clips (keeps the pace up)"],
  ["max_clips_per_stream","number","Max clips per stream"],

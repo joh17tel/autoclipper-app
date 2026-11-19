@@ -48,6 +48,10 @@ comment_question: true        # add a question to captions ("Rate this play 1-10
 posting_audience: "US"        # US = schedule for US evenings (your mornings) | PH = Philippine evenings
 posts_per_day: 3
 
+# ---- Content type ----
+default_category: "gaming"    # gaming | irl | talk  (each campaign can set its own)
+irl_layout: "follow"          # IRL/talk: follow = crop on the person (fills the screen) | fit = whole frame + blur
+
 # ---- Clip shape ----
 # Clips grow with the action: a short spike gets a short clip, a long fight gets up to 30s.
 max_clip_seconds: 30        # hard cap (a campaign brief can make it shorter)

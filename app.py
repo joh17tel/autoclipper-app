@@ -350,6 +350,8 @@ def create_campaign():
         with open(os.path.join(folder, "brief.txt"), "w", encoding="utf-8") as f:
             f.write(text)
     _save_uploads(folder)
+    if request.form.get("category") in ("gaming", "irl", "talk"):
+        campaign.set_override(folder, "category", request.form["category"])
     campaign.build_campaign_yaml(folder)
     ENGINE.log(f"New campaign added: {name} - checking it now")
     ENGINE.check_now()   # start working on it right away
@@ -381,6 +383,16 @@ def save_yaml(name):
         text = text.split("\n", 1)[1] if "\n" in text else ""
     with open(os.path.join(folder, "campaign.yaml"), "w", encoding="utf-8") as f:
         f.write(text)
+    return jsonify(campaign_summary(folder))
+
+
+@app.post("/api/campaigns/<name>/set")
+def set_campaign_option(name):
+    folder = camp_dir(name)
+    data = request.get_json(force=True)
+    if data.get("category") in ("gaming", "irl", "talk"):
+        campaign.set_override(folder, "category", data["category"])
+        ENGINE.log(f"Campaign {name}: category set to {data['category']}")
     return jsonify(campaign_summary(folder))
 
 

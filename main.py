@@ -178,9 +178,10 @@ def snap_bounds(words, want_s, want_e, lo, hi):
 
 
 def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, disc,
-                used_hooks, score, source_info, hook_hint=None):
+                used_hooks, score, source_info, hook_hint=None, category="gaming"):
     """raw -> snapped, normalized, vertical clip + thumbnail + captions + checks."""
     temps = []
+    follow_x = None
     dur = layout.probe_duration(raw) or (want_e + PAD)
     on = (disc or {}).get("enabled", False)
     disc_text = disc.get("on_screen_text", "Paid partnership") if on else None
@@ -250,25 +251,32 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
                           for w in words]
         src, peak_t = opened, peak_t + added
 
+    if category in ("irl", "talk") and not cam and cfg.get("irl_layout", "follow") == "follow":
+        follow_x = layout.face_center_x(src)
+        follow_x = 0.5 if follow_x is None else follow_x   # no face found: centre crop
+    hist = copywriter.load_history()
     meta = copywriter.write_copy(streamer, words, peak_t, hashtags, seed=f"{cdir}",
                                  used=used_hooks, disclosure_tag=disc_tag, hook_hint=hook_hint,
-                                 question=cfg.get("comment_question", True))
+                                 question=cfg.get("comment_question", True),
+                                 category=category, history=hist)
+    copywriter.save_history(hist)
     ass = os.path.join(cdir, "captions.ass")
     temps.append(ass)
     render.write_ass(words, ass, meta["hook"] if cfg.get("hook_on_video", True) else None,
                      split=bool(cam), disclosure=disc_text,
                      disclosure_seconds=float((disc or {}).get("seconds", 3)))
     render.make_vertical(src, os.path.join(cdir, "clip.mp4"), ass, cam,
-                         peak_t if cfg.get("zoom_on_peak", True) else None, cfg.get("watermark"))
+                         peak_t if cfg.get("zoom_on_peak", True) else None, cfg.get("watermark"), follow_x)
     tass = os.path.join(cdir, "thumb.ass")
     temps.append(tass)
     render.write_thumb_ass(tass, meta["hook"], streamer, split=bool(cam))
-    render.make_thumbnail(src, peak_t, os.path.join(cdir, "thumbnail.jpg"), tass, cam)
+    render.make_thumbnail(src, peak_t, os.path.join(cdir, "thumbnail.jpg"), tass, cam, follow_x)
 
     camp = cfg.get("campaign") or {}
     meta.update({"channel": streamer, "score": round(score, 2), **source_info,
                  "length_sec": round(layout.probe_duration(os.path.join(cdir, "clip.mp4")), 1),
-                 "layout": "facecam" if cam else "gameplay",
+                 "layout": "facecam" if cam else ("person" if follow_x is not None else "gameplay"),
+                 "category": category,
                  "created": datetime.now().isoformat(timespec="minutes"),
                  "campaign": camp.get("name", "General"),
                  "platforms": camp.get("platforms", ["tiktok", "youtube"]),
@@ -311,13 +319,17 @@ def clip_stream(cfg, get_part, audio_path, stream_dir, streamer, hashtags, chat=
         try:
             g0 = max(0, start - PAD)
             raw = get_part(g0, end + PAD, raw)
+            cat = cfg.get("category", "gaming")
             if not cam_checked:  # find the webcam once per stream
-                cam = resolve_facecam(facecam_setting, raw)
+                cam = resolve_facecam(facecam_setting if cat == "gaming" or isinstance(facecam_setting, list)
+                                      else "none", raw)
                 cam_checked = True
-                log(f"   layout: {'facecam on top + gameplay' if cam else 'gameplay only'}")
+                log(f"   category: {cat} | layout: " + ("facecam on top + gameplay" if cam else
+                    ("crop on the person" if cat != "gaming" else "gameplay only")))
             meta = finish_clip(cfg, raw, cdir, streamer, hashtags, start - g0, end - g0,
                                peak_abs - g0, cam, disc or {}, used_hooks, score,
-                               {"start_sec": start, "end_sec": end, "source": "auto-detected"})
+                               {"start_sec": start, "end_sec": end, "source": "auto-detected"},
+                               category=cat)
             made += 1
             _log_clip(i, meta, f"@ {start//3600}:{start%3600//60:02d}:{start%60:02d} score {score:.1f} ")
         except Exception as e:
@@ -329,11 +341,11 @@ def clip_stream(cfg, get_part, audio_path, stream_dir, streamer, hashtags, chat=
 
 
 def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
-    """Twitch clips made by the streamer's own viewers = human-picked best moments."""
+    """Twitch/Kick clips made by the streamer's own viewers = human-picked best moments."""
     from autoclipper import detect as _d
     url = ch["url"]
     try:
-        clips = sources.twitch_top_clips(url, cfg.get("viewer_clips_range", "7d"), 40)
+        clips = sources.top_viewer_clips(url, cfg.get("viewer_clips_range", "7d"), 40)
     except Exception as e:
         log(f"[{m_name}] {ch.get('name')}: couldn't read viewer clips - {short_err(e)}")
         return 0, 0
@@ -348,6 +360,8 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
     if not clips:
         return 0, 0
     log(f"[{m_name}] {ch.get('name')}: {len(clips)} viewer clips this week, {len(fresh)} new worth making")
+    if not fresh:
+        return 0, len(clips)
     out = os.path.join(base, f"{datetime.now():%Y-%m-%d}_{safe(ch.get('name') or m_name)}_viewerclips")
     os.makedirs(out, exist_ok=True)
     made, used = 0, set()
@@ -362,10 +376,13 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
         try:
             raw = sources.download_clip(c["url"], raw)
             dur = layout.probe_duration(raw)
+            cat = cfg.get("category", "gaming")
             if not cam_checked:
-                cam = resolve_facecam(ch.get("facecam", "auto"), raw)
+                fc = ch.get("facecam", "auto")
+                cam = resolve_facecam(fc if cat == "gaming" or isinstance(fc, list) else "none", raw)
                 cam_checked = True
-                log(f"   layout: {'facecam on top + gameplay' if cam else 'gameplay only'}")
+                log(f"   category: {cat} | layout: " + ("facecam on top + gameplay" if cam else
+                    ("crop on the person" if cat != "gaming" else "gameplay only")))
             energy = _d.audio_energy_per_second(raw)
             peak = float(energy.argmax()) if len(energy) else dur * 0.7
             # viewer clips often run long: keep up to the target length, ending after the peak
@@ -376,7 +393,7 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
                                cam, disc or {}, used, float(c.get("view_count") or 0),
                                {"source": "viewer clip", "source_url": c["url"],
                                 "source_views": c.get("view_count"), "source_title": c.get("title")},
-                               hook_hint=c.get("title"))
+                               hook_hint=c.get("title"), category=cat)
             made += 1
             state["done_vods"].append(key)
             _log_clip(i, meta, f"(viewer clip, {c.get('view_count')} views) ")
@@ -432,9 +449,11 @@ def run_job(job, state, out_dir, budget=1):
             continue
         cname = ch.get("name") or jname
         m = job["cfg"]  # fresh settings for every streamer
+        if ch.get("category") in copywriter.CATEGORIES and ch["category"] != m.get("category"):
+            m = campaign.apply_category(dict(m), ch["category"], {})   # this streamer is a different type
         tags = campaign.campaign_tags(m, ch.get("hashtags", ""))
         # 1a) Twitch: clips the streamer's viewers already made = human-picked best moments
-        if m.get("use_viewer_clips", True) and sources.twitch_login(ch["url"]) \
+        if m.get("use_viewer_clips", True) and sources.has_viewer_clips(ch["url"]) \
                 and not ch.get("_vclips_done") and take():
             share = float(m.get("viewer_clip_share", 0.5))
             mv = dict(m)
