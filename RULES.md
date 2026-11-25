@@ -28,7 +28,28 @@ then compares self-check scores and payoff timing against your real views (Insig
 - End on a finished sentence shortly after the reaction (5–9s), never mid-word.
 - Trending-on-Reddit moments are clipped first (web research).
 
+## Self-tuning (v6.8.0)
+Once a day the app runs research -> self-critique -> rule update on its own (`autoclipper/rules.py`):
+1. **Self-critique:** reviews clips made since the last rule change. A warning on 40%+ of them (6+ clips) tightens the matching rule.
+2. **Your views:** payoff timing, time after payoff and hook style vs real views. Needs 4+ newly measured clips each time.
+3. **Web:** title length and question-style of your streamers' top clips vs the rest (YouTube), plus Reddit buzz.
+
+Each rule moves one small step per day inside a safe range. Every change is logged in `rules.json`
+(date, old -> new, why, evidence) and shown in Insights, which also has a Reset button.
+Your own views win over web signals. Campaign briefs win over everything.
+
+| Rule | Default | Range |
+|---|---|---|
+| Payoff deadline (no cold open) | 10s | 6–14 |
+| Build-up before the moment | 18s | 10–22 |
+| Reaction after the moment | 9s | 4–12 |
+| Dead air cut, gaming / talk | 1.2s / 0.7s | 0.6–2.0 / 0.4–1.2 |
+| Max clip length | 30s | 15–45 |
+| Max hook words | 9 | 4–12 |
+| Question-hook preference | 1.0× | 0.6–1.6× |
+
 ## Changelog
+- 2026-11-25 (v6.8.0): The system now rewrites its own rules daily (self-critique + your views + web), bounded and logged.
 - 2026-11-25 (v6.7.0): Added self-check rubric (retention score + warnings per clip), payoff-by-10s rule
   when there's no cold open, 0.7s dead-air cut for IRL/talk. Why: 2026 research is consistent that the first
   2s and ~70% completion decide reach; the old setup let payoff land at ~18s on no-cold-open clips.

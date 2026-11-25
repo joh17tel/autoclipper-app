@@ -256,6 +256,24 @@ def insights():
                     "min_clips": learn.MIN_CLIPS, "enabled": cfg().get("self_learning", True)})
 
 
+@app.get("/api/rules")
+def rules_get():
+    from autoclipper import rules
+    return jsonify({"current": rules.current(), "changed": rules.changed_only(),
+                    "defaults": {k: v[0] for k, v in rules.TUNABLE.items()},
+                    "describe": {k: v[4] for k, v in rules.TUNABLE.items()},
+                    "review": rules.last_review(), "changelog": rules.changelog(),
+                    "enabled": cfg().get("auto_tune_rules", True)})
+
+
+@app.post("/api/rules/reset")
+def rules_reset():
+    from autoclipper import rules
+    rules.reset()
+    ENGINE.log("Rules: reset to defaults")
+    return jsonify({"ok": True})
+
+
 @app.post("/api/insights/refresh")
 def insights_refresh():
     def work():

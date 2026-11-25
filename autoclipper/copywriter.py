@@ -184,7 +184,8 @@ def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
                seed: str, used: set | None = None, disclosure_tag: str = "",
                hook_hint: str | None = None, question: bool = True,
                category: str = "gaming", history: list | None = None,
-               extra_hype: set | None = None, weight_fn=None) -> dict:
+               extra_hype: set | None = None, weight_fn=None,
+               max_words: int = 9, question_bias: float = 1.0) -> dict:
     cat = category if category in CATEGORIES else "gaming"
     rnd = random.Random(seed)
     used = used if used is not None else set()
@@ -201,6 +202,10 @@ def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
     candidates += [(1.0 + 0.3 * rnd.random(), "template", t.format(s=streamer), t) for t in raws]
     if weight_fn:   # what the learner found works (more views) moves up; what flopped moves down
         candidates = [(p * weight_fn(k, raw), k, t, raw) for p, k, t, raw in candidates]
+    # self-tuned rules: overly long hooks sink, question hooks get the tuned bias
+    candidates = [(p * (0.5 if len(t.split()) > max_words else 1.0)
+                   * (question_bias if t.rstrip().endswith("?") else 1.0), k, t, raw)
+                  for p, k, t, raw in candidates]
     candidates.sort(key=lambda c: c[0], reverse=True)
 
     pick = next((c for c in candidates if _fresh(c[2], hist, used, streamer)), candidates[0])

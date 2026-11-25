@@ -98,6 +98,12 @@ def _payoff_bucket(t):
     return "payoff 0-3s" if t <= 3 else "payoff 3-8s" if t <= 8 else "payoff 8-12s" if t <= 12 else "payoff 12s+"
 
 
+def _tail_bucket(t):
+    if t is None:
+        return None
+    return "ends 0-6s after" if t <= 6 else "ends 6s+ after"
+
+
 def _rscore_bucket(v):
     if v is None:
         return None
@@ -116,6 +122,9 @@ def _features(meta: dict, post_time: str | None) -> dict:
         "streamer": meta.get("channel"),
         "payoff timing": _payoff_bucket((meta.get("retention") or {}).get("payoff_at")),
         "retention score": _rscore_bucket((meta.get("retention") or {}).get("score")),
+        "after payoff": _tail_bucket((meta.get("retention") or {}).get("after_payoff")),
+        "hook style": ("question" if str(meta.get("hook", "")).rstrip().endswith("?") else "statement")
+                      if meta.get("hook") else None,
     }
     if post_time:
         try:
@@ -181,6 +190,7 @@ def learn(clips_meta: dict) -> dict:
     out["actions"] = _decide(out) if out["ready"] else {}
     old = _load(LEARNED, {})
     out["research"] = old.get("research", {})
+    out["web"] = old.get("web", {})
     _save(LEARNED, out)
     return out
 

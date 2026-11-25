@@ -34,6 +34,8 @@ def scan(streamer: str, limit: int = 40) -> dict | None:
         return None
     vids.sort(key=lambda x: x["views"], reverse=True)
     top = vids[: max(3, len(vids) // 4)]
+    from autoclipper.rules import title_style
+    rest = vids[len(top):]
     words = Counter()
     for v in top:
         for w in re.findall(r"[a-z']+", v["title"].lower()):
@@ -46,6 +48,8 @@ def scan(streamer: str, limit: int = 40) -> dict | None:
         "all_median_seconds": round(statistics.median([v["duration"] for v in vids]), 1),
         "top_median_views": int(statistics.median([v["views"] for v in top])),
         "hot_words": [w for w, c in words.most_common(12) if c >= 2],
+        "top_style": title_style([v["title"] for v in top]),
+        "rest_style": title_style([v["title"] for v in rest]) if len(rest) >= 3 else None,
         "top_titles": [{"title": v["title"], "views": v["views"], "seconds": v["duration"]} for v in top[:8]],
     }
 

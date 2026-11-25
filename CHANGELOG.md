@@ -1,5 +1,13 @@
 # What's new
 
+## 6.8.0 - The system rewrites its own clip rules
+- Daily calibration: critiques its own recent clips, checks your views and the web, then nudges its rules one safe step
+- Tunes: payoff deadline, build-up, reaction length, dead-air cuts, max length, hook length, question-hook preference
+- Never repeats a change on the same evidence; your views beat web signals; campaign briefs beat everything
+- Insights: "Rules it rewrote itself" panel with current values, self-review stats, dated changelog, and Reset
+- Settings: turn auto-tuning on/off
+- Fix: web research data was being wiped each time views were analysed
+
 ## 6.7.0 - Retention self-check + tighter pacing
 - Every clip gets a self-check score (0-100) with plain warnings: slow first 2s, late payoff, dragging ending, long pauses
 - No cold open? The clip now starts so the payoff lands by 10s (was ~18s)

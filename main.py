@@ -18,7 +18,7 @@ from datetime import datetime
 
 import yaml
 
-from autoclipper import campaign, captions, copywriter, detect, gallery, layout, learn, render, research, sources, trends
+from autoclipper import campaign, captions, copywriter, detect, gallery, layout, learn, render, research, rules, sources, trends
 
 STATE = "state.json"
 
@@ -271,7 +271,9 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
                                  used=used_hooks, disclosure_tag=disc_tag, hook_hint=hook_hint,
                                  question=cfg.get("comment_question", True),
                                  category=category, history=hist, extra_hype=hot,
-                                 weight_fn=learn.hook_weight if cfg.get("self_learning", True) else None)
+                                 weight_fn=learn.hook_weight if cfg.get("self_learning", True) else None,
+                                 max_words=int(cfg.get("hook_max_words", 9)),
+                                 question_bias=float(cfg.get("question_hook_bias", 1.0)))
     copywriter.save_history(hist)
     ass = os.path.join(cdir, "captions.ass")
     temps.append(ass)
@@ -297,7 +299,9 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
                  "platforms": camp.get("platforms", ["tiktok", "youtube"]),
                  "manual_rules": camp.get("manual_rules", [])})
     meta["retention"] = retention_review(words, peak_t, meta["length_sec"], src != trimmed,
-                                         dead_removed, bool(meta.get("hook")) and cfg.get("hook_on_video", True))
+                                         dead_removed, bool(meta.get("hook")) and cfg.get("hook_on_video", True),
+                                         float(cfg.get("max_payoff_seconds", 10)),
+                                         float(cfg.get("clip_after_peak", 9)) + 3)
     meta["checks"] = campaign.check_clip(meta, cfg) + [
         {"ok": False, "text": f"Retention: {w}"} for w in meta["retention"]["warnings"]]
     with open(os.path.join(cdir, "caption.txt"), "w", encoding="utf-8") as f:
@@ -310,7 +314,7 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
     return meta
 
 
-def retention_review(words, peak_t, length, cold_open, dead_removed, hook_text):
+def retention_review(words, peak_t, length, cold_open, dead_removed, hook_text, max_payoff=10.0, max_tail=12.0):
     """Self-critique of a finished clip against short-form retention rules (see RULES.md).
     Score 0-100; warnings name what a viewer would swipe on."""
     first_word = words[0]["start"] if words else None
@@ -321,14 +325,14 @@ def retention_review(words, peak_t, length, cold_open, dead_removed, hook_text):
     elif first_word is not None and first_word > 2.5 and not cold_open:
         score -= 10
         warn.append(f"first words at {first_word:.1f}s - slow start")
-    if peak_t > 10 and not cold_open:
+    if peak_t > max_payoff + 0.5 and not cold_open:
         score -= 25
-        warn.append(f"payoff at {peak_t:.0f}s - viewers expect it by ~10s")
+        warn.append(f"payoff at {peak_t:.0f}s - viewers expect it by ~{max_payoff:.0f}s")
     if length and length > 35:
         score -= 10
         warn.append(f"{length:.0f}s long - needs very strong middle to keep 70% watching")
     tail = (length or 0) - peak_t
-    if tail > 12:
+    if tail > max_tail:
         score -= 15
         warn.append(f"{tail:.0f}s after the payoff - ending drags, hurts completion/rewatch")
     gaps = [b["start"] - a["end"] for a, b in zip(words, words[1:])]
@@ -505,6 +509,7 @@ def clip_web_trending(cfg, ch, m_name, state, base, hashtags, disc):
 
 def build_jobs(cfg, include_disabled=False):
     """One job per campaign folder, plus config.yaml's own channels (if any)."""
+    cfg = rules.apply(cfg)          # rules the system tuned itself (RULES.md)
     cfg = learn.apply_to_cfg(cfg)   # settings the learner is confident about
     jobs = []
     for folder in campaign.discover(cfg.get("campaigns_folder", "campaigns")):
@@ -787,4 +792,13 @@ def learning_cycle(cfg, force=False):
                 log(f"Web: couldn't scan {nm} ({short_err(e)})")
         learn._save(learn.LEARNED, L)
         stamp["web"] = now
+    if force or now - stamp.get("rules", 0) > 24 * 3600:
+        try:   # research -> self-critique -> rewrite the rules (bounded, logged in rules.json)
+            ch = rules.calibrate(cfg, learn.learned(), log)
+            rv = rules.last_review()
+            log(f"Rules: calibrated - {len(ch)} change(s)"
+                + (f"; my last {rv['clips']} clips average self-check {rv['avg_score']}" if rv else ""))
+        except Exception as e:
+            log(f"Rules: calibration failed ({short_err(e)})")
+        stamp["rules"] = now
     learn._save("learn_stamp.json", stamp)
