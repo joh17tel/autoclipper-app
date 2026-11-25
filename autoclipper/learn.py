@@ -92,6 +92,18 @@ def _length_bucket(sec):
     return "under 15s" if sec < 15 else "15-20s" if sec < 20 else "20-25s" if sec < 25 else "25-30s" if sec <= 31 else "30s+"
 
 
+def _payoff_bucket(t):
+    if t is None:
+        return None
+    return "payoff 0-3s" if t <= 3 else "payoff 3-8s" if t <= 8 else "payoff 8-12s" if t <= 12 else "payoff 12s+"
+
+
+def _rscore_bucket(v):
+    if v is None:
+        return None
+    return "self-check 90+" if v >= 90 else "self-check 70-89" if v >= 70 else "self-check <70"
+
+
 def _features(meta: dict, post_time: str | None) -> dict:
     f = {
         "hook type": meta.get("hook_kind"),
@@ -102,6 +114,8 @@ def _features(meta: dict, post_time: str | None) -> dict:
         "layout": meta.get("layout"),
         "category": meta.get("category"),
         "streamer": meta.get("channel"),
+        "payoff timing": _payoff_bucket((meta.get("retention") or {}).get("payoff_at")),
+        "retention score": _rscore_bucket((meta.get("retention") or {}).get("score")),
     }
     if post_time:
         try:

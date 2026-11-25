@@ -400,7 +400,7 @@ $("#bNewCamp").onclick=()=>{selCamp=null;renderCampList();$("#campDetail").inner
     catch(e){clearTimeout(slow);btn.disabled=false;btn.textContent="Create campaign";$("#nMsg").textContent="Not created — see the message at the bottom of the screen."}}};
 
 /* insights */
-const FEAT_NAMES={"hook type":"Hook type","hook line":"Hook lines","length":"Clip length","cold open":"Cold open",
+const FEAT_NAMES={"payoff timing":"When the payoff lands","retention score":"Self-check score","hook type":"Hook type","hook line":"Hook lines","length":"Clip length","cold open":"Cold open",
   "source":"Moment source","layout":"Layout","category":"Category","streamer":"Streamer","posting hour":"Posting time (your clock)"};
 async function loadInsights(){try{const r=await api("/api/insights");const L=r.learned||{};
   $("#insStatus").innerHTML=`<b>${r.tracked_posts}</b> post links saved · <b>${L.measured_clips||0}</b> clips measured`
@@ -457,6 +457,8 @@ const FIELDS=[
  ["viewer_clip_share","select:0.25,0.5,0.75,1","Share of clips from viewer-made Twitch clips (rest = deeper cuts)"],
  ["self_learning","bool","Self-learning: adjust clips from your posts' views and other clippers' results"],
  ["explore_rate","select:0.1,0.25,0.4","Share of clips that keep experimenting (cold open on/off)"],
+ ["max_payoff_seconds","number","No cold open: payoff must land by (seconds)"],
+ ["dead_air_seconds_talk","number","IRL/talk: cut pauses longer than (seconds)"],
  ["web_research","bool","Web research: watch Reddit for your streamers' viral moments and clip them first"],
  ["web_research_hours","number","Check the web every (hours)"],
  ["web_trending_clips_per_check","number","Trending moments to clip per streamer per check"],

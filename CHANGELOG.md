@@ -1,5 +1,12 @@
 # What's new
 
+## 6.7.0 - Retention self-check + tighter pacing
+- Every clip gets a self-check score (0-100) with plain warnings: slow first 2s, late payoff, dragging ending, long pauses
+- No cold open? The clip now starts so the payoff lands by 10s (was ~18s)
+- IRL/talk clips cut pauses from 0.7s (gaming stays at 1.2s)
+- The learner now compares payoff timing and self-check scores against your real views
+- RULES.md documents the rules and a dated changelog of why they changed
+
 ## 6.6.0 - Web research (learns from what's going viral right now)
 - New: every 3 hours it checks Reddit (r/LivestreamFail + all of Reddit) for your streamers' most upvoted posts this week
 - Trending moments that link a Twitch/Kick/YouTube clip are clipped FIRST, with the post title as the hook idea (each one only once)

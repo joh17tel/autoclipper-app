@@ -189,6 +189,10 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
     disc_tag = disc.get("caption_tag", "#ad") if on else ""
     use_caps = cfg.get("captions", True)
 
+    # Retention rule (v6.7): without a cold open, the payoff must land within max_payoff_seconds,
+    # or viewers swipe before it (Shorts/TikTok decide in ~2s, payoff expected by ~10s)
+    if not cfg.get("cold_open", True):
+        want_s = max(want_s, peak - float(cfg.get("max_payoff_seconds", 10)))
     # 1) transcribe once (padded), snap the cut to sentence boundaries
     words_all = captions.transcribe_words(raw, cfg.get("whisper_model", "small")) if use_caps else []
     s, e = snap_bounds(words_all, max(0.0, want_s), min(dur, want_e), 0.0, dur)
@@ -204,10 +208,14 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
              for w in words_all if w["start"] >= s - 0.05 and w["end"] <= e + 0.1]
     peak_t = min(max(peak - s, 0.5), max(e - s - 0.5, 0.5))
 
+    dead_removed = 0.0
     # cut dead air (quiet stretches with no talking and no action) to keep the pace up
     if cfg.get("cut_dead_air", True):
-        quiet = [(a, b) for a, b in detect.silences(trimmed, min_len=float(cfg.get("dead_air_seconds", 1.2)))
-                 if b - a >= 1.0 and not (a - 2.5 <= peak_t <= b + 2.5)
+        gap = float(cfg.get("dead_air_seconds", 1.2))
+        if category in ("irl", "talk"):   # talking content: pauses feel slow sooner than gameplay
+            gap = min(gap, float(cfg.get("dead_air_seconds_talk", 0.7)))
+        quiet = [(a, b) for a, b in detect.silences(trimmed, min_len=gap)
+                 if b - a >= gap and not (a - 2.5 <= peak_t <= b + 2.5)
                  and not any(a < w["start"] < b for w in words)]
         if quiet:
             clip_len = layout.probe_duration(trimmed)
@@ -220,10 +228,11 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
             if clip_len - cur > 0.3:
                 keep.append((cur, clip_len))
             removed = clip_len - sum(b - a for a, b in keep)
-            if removed >= 0.8 and sum(b - a for a, b in keep) >= 8:
+            if removed >= 0.5 and sum(b - a for a, b in keep) >= 8:
                 tight = os.path.join(cdir, "tight.mp4")
                 render.keep_segments(trimmed, keep, tight)
                 temps.append(tight)
+                dead_removed = removed
 
                 def remap(t):
                     out = 0.0
@@ -287,7 +296,10 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
                  "campaign": camp.get("name", "General"),
                  "platforms": camp.get("platforms", ["tiktok", "youtube"]),
                  "manual_rules": camp.get("manual_rules", [])})
-    meta["checks"] = campaign.check_clip(meta, cfg)
+    meta["retention"] = retention_review(words, peak_t, meta["length_sec"], src != trimmed,
+                                         dead_removed, bool(meta.get("hook")) and cfg.get("hook_on_video", True))
+    meta["checks"] = campaign.check_clip(meta, cfg) + [
+        {"ok": False, "text": f"Retention: {w}"} for w in meta["retention"]["warnings"]]
     with open(os.path.join(cdir, "caption.txt"), "w", encoding="utf-8") as f:
         f.write(copywriter.caption_txt(meta))
     with open(os.path.join(cdir, "meta.json"), "w", encoding="utf-8") as f:
@@ -298,9 +310,39 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
     return meta
 
 
+def retention_review(words, peak_t, length, cold_open, dead_removed, hook_text):
+    """Self-critique of a finished clip against short-form retention rules (see RULES.md).
+    Score 0-100; warnings name what a viewer would swipe on."""
+    first_word = words[0]["start"] if words else None
+    score, warn = 100, []
+    if not hook_text and (first_word is None or first_word > 1.5) and not cold_open:
+        score -= 25
+        warn.append("nothing grabs attention in the first 2s (no hook text, no early talking, no cold open)")
+    elif first_word is not None and first_word > 2.5 and not cold_open:
+        score -= 10
+        warn.append(f"first words at {first_word:.1f}s - slow start")
+    if peak_t > 10 and not cold_open:
+        score -= 25
+        warn.append(f"payoff at {peak_t:.0f}s - viewers expect it by ~10s")
+    if length and length > 35:
+        score -= 10
+        warn.append(f"{length:.0f}s long - needs very strong middle to keep 70% watching")
+    tail = (length or 0) - peak_t
+    if tail > 12:
+        score -= 15
+        warn.append(f"{tail:.0f}s after the payoff - ending drags, hurts completion/rewatch")
+    gaps = [b["start"] - a["end"] for a, b in zip(words, words[1:])]
+    long_gaps = sum(1 for g in gaps if g > 2.0)
+    if long_gaps >= 2:
+        score -= 10
+        warn.append(f"{long_gaps} pauses over 2s still in the clip")
+    return {"score": max(0, score), "first_words_at": first_word, "payoff_at": round(peak_t, 1),
+            "after_payoff": round(tail, 1), "dead_air_cut": round(dead_removed, 1), "warnings": warn}
+
+
 def _log_clip(i, meta, where=""):
     bad = [c["text"] for c in meta["checks"] if not c["ok"]]
-    log(f"   clip {i:02d} {where}| {meta['length_sec']}s | {meta['hook']}"
+    log(f"   clip {i:02d} {where}| {meta['length_sec']}s | retention {meta.get('retention', {}).get('score', '-')} | {meta['hook']}"
         + (f"  !! check: {'; '.join(bad)}" if bad else ""))
 
 
