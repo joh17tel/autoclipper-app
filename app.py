@@ -162,8 +162,10 @@ def logs():
 # ------------------------------------------------------------------ clips
 @app.get("/api/clips")
 def clips():
+    from autoclipper import learn
     base = out_dir()
     posted = load_posted()
+    links = learn._load(learn.POSTS, {})
     items = []
     for mp in glob.glob(os.path.join(base, "**", "meta.json"), recursive=True):
         try:
@@ -172,6 +174,7 @@ def clips():
         except Exception:
             continue
         cid = os.path.relpath(os.path.dirname(mp), base).replace("\\", "/")
+        m["links"] = {k: v.get("url") for k, v in links.get(cid, {}).items()}
         m.update({"id": cid, "posted": _is_done(posted.get(cid), m.get("platforms") or ["tiktok", "youtube"]),
                   "posted_on": posted.get(cid) if isinstance(posted.get(cid), dict) else {},
                   "video": f"/media/{cid}/clip.mp4", "thumb": f"/media/{cid}/thumbnail.jpg"})
@@ -209,6 +212,59 @@ def mark_posted():
     else:
         p[cid] = bool(data.get("posted", True))
     save_posted(p)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/clips/link")
+def clip_link():
+    """Save the link of a posted clip so AutoClipper can track its views and learn from it."""
+    from autoclipper import learn
+    d = request.get_json(force=True)
+    url = (d.get("url") or "").strip()
+    if not url.startswith("http"):
+        return jsonify({"error": "Paste the full link (starts with https://)"}), 400
+    learn.add_link(d["id"], d["platform"], url)
+    p = load_posted()   # adding a link also ticks that platform as posted
+    cur = p.get(d["id"]) if isinstance(p.get(d["id"]), dict) else {}
+    cur[d["platform"]] = True
+    p[d["id"]] = cur
+    save_posted(p)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/clips/views")
+def clip_views():
+    from autoclipper import learn
+    d = request.get_json(force=True)
+    learn.set_manual_views(d["id"], d["platform"], int(d["views"]))
+    return jsonify({"ok": True})
+
+
+@app.get("/api/insights")
+def insights():
+    from autoclipper import learn
+    L = learn.learned()
+    posts = learn._load(learn.POSTS, {})
+    perf = learn._load(learn.PERF, {})
+    latest = {}
+    for cid, plats in perf.items():
+        for plat, rows in plats.items():
+            if rows:
+                latest.setdefault(cid, {})[plat] = rows[-1]
+    tracked = sum(len(v) for v in posts.values())
+    return jsonify({"learned": L, "tracked_posts": tracked, "latest": latest,
+                    "min_clips": learn.MIN_CLIPS, "enabled": cfg().get("self_learning", True)})
+
+
+@app.post("/api/insights/refresh")
+def insights_refresh():
+    def work():
+        try:
+            core.learning_cycle(cfg(), force=True)
+        except Exception as e:
+            ENGINE.log(f"learning failed: {e}")
+    threading.Thread(target=work, daemon=True).start()
+    ENGINE.log("Learning: checking your posts' views and scanning other clippers now...")
     return jsonify({"ok": True})
 
 

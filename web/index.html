@@ -76,6 +76,7 @@ nav button{width:auto}.navfoot,.brand{display:none}.tiles{grid-template-columns:
   <button data-tab="dash" class="on">📊 Dashboard</button>
   <button data-tab="clips">🎬 Clips <span class="badge" id="nReady">0</span></button>
   <button data-tab="camps">📋 Campaigns</button>
+  <button data-tab="insights">📈 Insights</button>
   <button data-tab="test">🧪 Test a video</button>
   <button data-tab="settings">⚙️ Settings</button>
   <div class="navfoot" id="navState">…</div>
@@ -140,6 +141,18 @@ nav button{width:auto}.navfoot,.brand{display:none}.tiles{grid-template-columns:
   </div>
 </section>
 
+<!-- INSIGHTS -->
+<section id="insights" class="hidden">
+  <h1>Insights</h1><p class="sub">AutoClipper learns from your own posts' views and from what other clippers post, then adjusts new clips.</p>
+  <div class="panel row" style="justify-content:space-between"><div id="insStatus" class="meta">Loading…</div>
+    <button class="btn" id="bInsRefresh">↻ Check views &amp; research now</button></div>
+  <div class="panel"><h2>What it changed</h2><div id="insActions" class="meta"></div></div>
+  <div class="panel"><h2>What gets more views (your posts)</h2>
+    <p class="hint">1.30× = about 30% more views than your average clip. Small samples are kept close to 1.00× until there's enough data.</p>
+    <div id="insFindings"></div></div>
+  <div class="panel"><h2>What other clippers post (YouTube)</h2><div id="insResearch" class="meta"></div></div>
+</section>
+
 <!-- TEST -->
 <section id="test" class="hidden">
   <h1>Test a video</h1><p class="sub">Clip any gaming video on your PC with a campaign's rules. Good for checking quality before going live.</p>
@@ -189,7 +202,7 @@ let tab="dash";
 $$("nav button").forEach(b=>b.onclick=()=>show(b.dataset.tab));
 function show(t){tab=t;$$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   $$("main>section").forEach(s=>s.classList.toggle("hidden",s.id!==t));
-  if(t==="clips")loadClips(); if(t==="camps")loadCamps(); if(t==="settings")loadSettings(); if(t==="test")fillCampSelect("#testCamp",false)}
+  if(t==="clips")loadClips(); if(t==="camps")loadCamps(); if(t==="settings")loadSettings(); if(t==="insights")loadInsights(); if(t==="test")fillCampSelect("#testCamp",false)}
 
 /* dashboard */
 const STATE_TEXT={working:"Working",idle:"Waiting for new streams",stopped:"Stopped",stopping:"Stopping…"};
@@ -228,9 +241,12 @@ async function loadPlan(){try{const p=await api("/api/plan");$("#planDay").textC
       <div class="row" style="margin-top:6px"><a class="btn sm" href="${c.video}?dl=1">⬇ Video</a></div></div>
     <div style="display:flex;flex-direction:column;gap:6px">${c.steps.map(st=>`<label class="row" style="gap:8px;font-size:13px">
       <input type="checkbox" data-p="${st.platform}" ${st.done?"checked":""}> <b style="width:70px">${st.time}</b> ${PLAT[st.platform]||st.platform}
-      <button class="btn sm" data-copy="${st.platform}">Copy caption</button></label>`).join("")}</div></div>`).join("");
+      <button class="btn sm" data-copy="${st.platform}">Copy caption</button>
+      <input type="text" data-link="${st.platform}" placeholder="paste post link" style="width:150px;padding:5px 8px;font-size:12px"></label>`).join("")}</div></div>`).join("");
   $$("#planList [data-i]").forEach(row=>{const c=p.plan[+row.dataset.i];
     row.querySelectorAll("input[data-p]").forEach(cb=>cb.onchange=async()=>{await post("/api/clips/posted",{id:c.id,platform:cb.dataset.p,posted:cb.checked});toast(cb.checked?"Marked posted":"Unmarked");status();loadClips(true)});
+    row.querySelectorAll("[data-link]").forEach(inp=>inp.onchange=async()=>{if(!inp.value.trim())return;
+      try{await post("/api/clips/link",{id:c.id,platform:inp.dataset.link,url:inp.value});toast("Link saved - views will be tracked");loadPlan();status()}catch(e){}});
     row.querySelectorAll("[data-copy]").forEach(b=>b.onclick=e=>{e.preventDefault();copy(b.dataset.copy==="youtube"?c.youtube_title+"\n\n"+c.youtube_description:c.tiktok_caption)})})}catch(e){}}
 async function loadClips(quiet){if(!quiet)loadPlan();CLIPS=await api("/api/clips");const camps=[...new Set(CLIPS.map(c=>c.campaign||"General"))];
   const sel=$("#fCamp"),cur=sel.value;sel.innerHTML='<option value="">All campaigns</option>'+camps.map(c=>`<option>${esc(c)}</option>`).join("");
@@ -254,11 +270,17 @@ function renderClips(){const camp=$("#fCamp").value,showMode=$("#fShow").value;
         ${tt?`<button class="btn sm" data-a="tt">Copy ${plats.includes("tiktok")?"TikTok":"IG"} caption</button>`:""}</div>
       <div class="row"><a class="btn sm" href="${c.video}?dl=1">⬇ Video</a><a class="btn sm" href="${c.thumb}?dl=1">⬇ Thumbnail</a>
         <button class="btn sm" data-a="open">📁 Folder</button></div>
+      <details><summary>Post links (so AutoClipper can learn from views)</summary>
+        ${plats.filter(p=>p!=="x").map(p=>`<div class="row" style="margin-top:6px"><span style="width:80px">${PLAT[p]||p}</span>
+          <input type="text" data-l="${p}" value="${esc((c.links||{})[p]||"")}" placeholder="https://..." style="flex:1;padding:5px 8px;font-size:12px"></div>`).join("")}</details>
       ${checks}${disc}${rules}
       <div class="row" style="justify-content:space-between;margin-top:4px">
         <button class="btn sm ${c.posted?"":"green"}" data-a="posted">${c.posted?"↩ Mark not posted":"✓ Mark posted"}</button>
         <button class="btn sm red" data-a="del">Delete</button></div></div>`}).join("");
-  $$("#clipGrid .card").forEach(card=>{const c=list[+card.dataset.i];card.querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{
+  $$("#clipGrid .card").forEach(card=>{const c=list[+card.dataset.i];
+    card.querySelectorAll("input[data-l]").forEach(inp=>inp.onchange=async()=>{if(!inp.value.trim())return;
+      try{await post("/api/clips/link",{id:c.id,platform:inp.dataset.l,url:inp.value});toast("Link saved");status()}catch(e){}});
+    card.querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{
     const a=b.dataset.a;
     if(a==="yt")copy(c.youtube_title);if(a==="yd")copy(c.youtube_description);if(a==="tt")copy(c.tiktok_caption);
     if(a==="open")post("/api/clips/open",{id:c.id});
@@ -376,6 +398,35 @@ $("#bNewCamp").onclick=()=>{selCamp=null;renderCampList();$("#campDetail").inner
       renderCamp(c.folder);status()}
     catch(e){clearTimeout(slow);btn.disabled=false;btn.textContent="Create campaign";$("#nMsg").textContent="Not created — see the message at the bottom of the screen."}}};
 
+/* insights */
+const FEAT_NAMES={"hook type":"Hook type","hook line":"Hook lines","length":"Clip length","cold open":"Cold open",
+  "source":"Moment source","layout":"Layout","category":"Category","streamer":"Streamer","posting hour":"Posting time (your clock)"};
+async function loadInsights(){try{const r=await api("/api/insights");const L=r.learned||{};
+  $("#insStatus").innerHTML=`<b>${r.tracked_posts}</b> post links saved · <b>${L.measured_clips||0}</b> clips measured`
+    +(L.ready?" · <span style='color:var(--ok)'>learning is active ✓</span>":` · needs <b>${r.min_clips}</b> measured clips before it starts adjusting`)
+    +(L.updated?` · last update ${esc(L.updated.replace("T"," "))}`:"")+(r.enabled?"":" · <span style='color:var(--bad)'>self-learning is OFF in Settings</span>");
+  const a=L.actions||{},acts=[];
+  if(a.max_clip_seconds)acts.push(`Longest clip set to <b>${a.max_clip_seconds}s</b>`);
+  if(a.cold_open!==undefined)acts.push(`Cold open <b>${a.cold_open?"ON":"OFF"}</b> (it worked ${a.cold_open?"better":"worse"})`);
+  if(a.viewer_clip_share!==undefined)acts.push(`Viewer picks share set to <b>${Math.round(a.viewer_clip_share*100)}%</b>`);
+  if(a.hook_type_weights)acts.push("Hook types re-ranked by results");
+  if(a.hook_line_weights)acts.push(`${Object.keys(a.hook_line_weights).length} hook lines re-ranked by results`);
+  if(a.best_posting_hour!==undefined)acts.push(`Best posting time so far: <b>${a.best_posting_hour}:00</b> your time`);
+  $("#insActions").innerHTML=acts.length?"<ul>"+acts.map(x=>`<li>${x}</li>`).join("")+"</ul>":"Nothing yet. Paste the links of clips you post (Clips tab → posting plan or each clip's “Post links”). AutoClipper reads their views every 6 hours.";
+  const F=L.findings||{};
+  $("#insFindings").innerHTML=Object.keys(F).length?Object.entries(F).filter(([k,rows])=>rows.length>1).map(([k,rows])=>`<div style="margin:12px 0"><b>${esc(FEAT_NAMES[k]||k)}</b>
+    ${rows.slice(0,8).map(x=>`<div class="row" style="gap:10px;font-size:13px;margin-top:4px"><span style="width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(x.value).replace("{s}","[streamer]"))}</span>
+      <span style="flex:1;max-width:260px;height:8px;background:#22262e;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;width:${Math.min(100,x.lift*50)}%;background:${x.lift>=1?"var(--ok)":"var(--bad)"}"></span></span>
+      <b style="width:52px">${x.lift.toFixed(2)}×</b><span class="meta">${x.clips} clip${x.clips===1?"":"s"}</span></div>`).join("")}</div>`).join(""):'<div class="meta">No measured clips yet.</div>';
+  const R=L.research||{};
+  $("#insResearch").innerHTML=Object.keys(R).length?Object.entries(R).map(([nm,x])=>`<div style="margin:10px 0 16px"><b>${esc(nm)}</b> <span class="meta">· ${x.videos} clips scanned ${esc((x.scanned||"").slice(0,10))}</span>
+    <div style="margin-top:4px">Top clips run about <b>${x.top_median_seconds}s</b> (all: ${x.all_median_seconds}s) · top clips median <b>${(x.top_median_views||0).toLocaleString()}</b> views</div>
+    <div style="margin-top:4px">Words in the best titles: ${(x.hot_words||[]).map(w=>`<span class="tag gray">${esc(w)}</span>`).join(" ")||"–"}</div>
+    <details style="margin-top:6px"><summary>Top titles (for inspiration - don't copy)</summary><ul>${(x.top_titles||[]).map(t=>`<li>${esc(t.title)} <span class="meta">· ${t.views.toLocaleString()} views · ${t.seconds}s</span></li>`).join("")}</ul></details></div>`).join("")
+    :"No scans yet. It scans each streamer once a day (or press the button above).";
+}catch(e){}}
+$("#bInsRefresh").onclick=async()=>{await post("/api/insights/refresh");toast("Checking… results appear in a minute",3000);setTimeout(loadInsights,60000)};
+
 /* test */
 $("#bRunTest").onclick=async()=>{const f=$("#testFile").files[0];if(!f){toast("Choose a video first");return}
   const fd=new FormData();fd.append("video",f);fd.append("campaign",$("#testCamp").value);$("#testMsg").textContent="Uploading…";
@@ -398,6 +449,8 @@ const FIELDS=[
  ["posting_audience","select:US,PH","Posting plan times for (US = your mornings, PH = your evenings)"],
  ["posts_per_day","number","Clips in the daily posting plan"],
  ["viewer_clip_share","select:0.25,0.5,0.75,1","Share of clips from viewer-made Twitch clips (rest = deeper cuts)"],
+ ["self_learning","bool","Self-learning: adjust clips from your posts' views and other clippers' results"],
+ ["explore_rate","select:0.1,0.25,0.4","Share of clips that keep experimenting (cold open on/off)"],
  ["comment_question","bool","Add a question to captions to get comments"],
  ["use_viewer_clips","bool","Use viewer-made Twitch clips"],
  ["captions","bool","Auto-captions on videos"],["hook_on_video","bool","Title bar hook (first 3 seconds)"],

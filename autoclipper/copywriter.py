@@ -126,10 +126,11 @@ def _clean(text: str) -> str:
 
 
 # ------------------------------------------------------------------ quotes from the transcript
-def best_quotes(words: list[dict], peak_t: float, limit: int = 5) -> list[str]:
+def best_quotes(words: list[dict], peak_t: float, limit: int = 5, extra_hype: set | None = None) -> list[str]:
     """Rank short phrases the streamer said by how 'hooky' they are."""
     if not words:
         return []
+    hype_set = HYPE_WORDS | (extra_hype or set())
     phrases, cur = [], []
     for i, w in enumerate(words):
         cur.append(w)
@@ -150,7 +151,7 @@ def best_quotes(words: list[dict], peak_t: float, limit: int = 5) -> list[str]:
                 text = _clean(" ".join(w["word"].strip() for w in seg))
                 if not text or toks[0] in BAD_STARTS or toks[-1] in BAD_ENDS:
                     continue
-                hype = sum(t in HYPE_WORDS for t in toks)
+                hype = sum(t in hype_set for t in toks)
                 filler = sum(t in FILLER for t in toks)
                 punct = 1 if re.search(r"[!?]", " ".join(w["word"] for w in seg)) else 0
                 near = max(0.0, 1 - abs(seg[0]["start"] - peak_t) / 8)
@@ -182,23 +183,28 @@ def _good_fan_title(hint: str, streamer: str) -> bool:
 def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
                seed: str, used: set | None = None, disclosure_tag: str = "",
                hook_hint: str | None = None, question: bool = True,
-               category: str = "gaming", history: list | None = None) -> dict:
+               category: str = "gaming", history: list | None = None,
+               extra_hype: set | None = None, weight_fn=None) -> dict:
     cat = category if category in CATEGORIES else "gaming"
     rnd = random.Random(seed)
     used = used if used is not None else set()
     hist = history if history is not None else []
 
-    candidates = []
+    candidates = []   # (priority, kind, text, raw_template)
     hint = _clean(re.sub(r"[^\w\s'!?.,-]", "", hook_hint or ""))
     if _good_fan_title(hint, streamer):
-        candidates.append(("fan", hint))
-    quotes = best_quotes(words, peak_t)
-    candidates += [("quote", q) for q in quotes]
-    tmpl = [t.format(s=streamer) for t in HOOKS[cat]]
-    rnd.shuffle(tmpl)
-    candidates += [("template", t) for t in tmpl]
+        candidates.append((3.0, "fan", hint, None))
+    quotes = best_quotes(words, peak_t, extra_hype=extra_hype)
+    candidates += [(2.4 - 0.2 * i, "quote", q, None) for i, q in enumerate(quotes)]
+    raws = list(HOOKS[cat])
+    rnd.shuffle(raws)
+    candidates += [(1.0 + 0.3 * rnd.random(), "template", t.format(s=streamer), t) for t in raws]
+    if weight_fn:   # what the learner found works (more views) moves up; what flopped moves down
+        candidates = [(p * weight_fn(k, raw), k, t, raw) for p, k, t, raw in candidates]
+    candidates.sort(key=lambda c: c[0], reverse=True)
 
-    kind, hook = next(((k, t) for k, t in candidates if _fresh(t, hist, used, streamer)), candidates[0])
+    pick = next((c for c in candidates if _fresh(c[2], hist, used, streamer)), candidates[0])
+    _, kind, hook, raw_template = pick
     used.add(_norm(hook))
     hist.append(_norm(hook))
 
@@ -223,6 +229,7 @@ def write_copy(streamer: str, words: list[dict], peak_t: float, hashtags: str,
     return {
         "hook": shown,
         "hook_kind": kind,
+        "hook_template": raw_template,
         "quote": quote,
         "category": cat,
         "youtube_title": youtube_title,

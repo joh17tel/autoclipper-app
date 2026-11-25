@@ -18,7 +18,7 @@ from datetime import datetime
 
 import yaml
 
-from autoclipper import campaign, captions, copywriter, detect, gallery, layout, render, sources
+from autoclipper import campaign, captions, copywriter, detect, gallery, layout, learn, render, research, sources
 
 STATE = "state.json"
 
@@ -182,6 +182,7 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
     """raw -> snapped, normalized, vertical clip + thumbnail + captions + checks."""
     temps = []
     follow_x = None
+    cfg = learn.experiment(cfg)   # a share of clips try the alternative, so the learner can compare
     dur = layout.probe_duration(raw) or (want_e + PAD)
     on = (disc or {}).get("enabled", False)
     disc_text = disc.get("on_screen_text", "Paid partnership") if on else None
@@ -255,10 +256,12 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
         follow_x = layout.face_center_x(src)
         follow_x = 0.5 if follow_x is None else follow_x   # no face found: centre crop
     hist = copywriter.load_history()
+    hot = research.hot_words_for(streamer, learn.learned().get("research"))
     meta = copywriter.write_copy(streamer, words, peak_t, hashtags, seed=f"{cdir}",
                                  used=used_hooks, disclosure_tag=disc_tag, hook_hint=hook_hint,
                                  question=cfg.get("comment_question", True),
-                                 category=category, history=hist)
+                                 category=category, history=hist, extra_hype=hot,
+                                 weight_fn=learn.hook_weight if cfg.get("self_learning", True) else None)
     copywriter.save_history(hist)
     ass = os.path.join(cdir, "captions.ass")
     temps.append(ass)
@@ -277,6 +280,8 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
                  "length_sec": round(layout.probe_duration(os.path.join(cdir, "clip.mp4")), 1),
                  "layout": "facecam" if cam else ("person" if follow_x is not None else "gameplay"),
                  "category": category,
+                 "cold_open": src != trimmed,
+                 "experiment": cfg.get("_experiment"),
                  "created": datetime.now().isoformat(timespec="minutes"),
                  "campaign": camp.get("name", "General"),
                  "platforms": camp.get("platforms", ["tiktok", "youtube"]),
@@ -408,6 +413,7 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
 
 def build_jobs(cfg, include_disabled=False):
     """One job per campaign folder, plus config.yaml's own channels (if any)."""
+    cfg = learn.apply_to_cfg(cfg)   # settings the learner is confident about
     jobs = []
     for folder in campaign.discover(cfg.get("campaigns_folder", "campaigns")):
         try:
@@ -451,6 +457,12 @@ def run_job(job, state, out_dir, budget=1):
         m = job["cfg"]  # fresh settings for every streamer
         if ch.get("category") in copywriter.CATEGORIES and ch["category"] != m.get("category"):
             m = campaign.apply_category(dict(m), ch["category"], {})   # this streamer is a different type
+        r = (learn.learned().get("research") or {}).get(cname.lower())
+        lacts = learn.learned().get("actions") or {}
+        if r and r.get("top_median_seconds") and "max_clip_seconds" not in lacts \
+                and not (m.get("campaign") or {}).get("max_seconds") and m.get("self_learning", True):
+            m = dict(m)   # what's working for other clippers of this streamer
+            m["max_clip_seconds"] = float(min(30, max(15, r["top_median_seconds"] + 3)))
         tags = campaign.campaign_tags(m, ch.get("hashtags", ""))
         # 1a) Twitch: clips the streamer's viewers already made = human-picked best moments
         if m.get("use_viewer_clips", True) and sources.has_viewer_clips(ch["url"]) \
@@ -616,3 +628,47 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------- learning cycle
+def learning_cycle(cfg, force=False):
+    """Read views of your posts, learn what works, and scan what other clippers post."""
+    if not cfg.get("self_learning", True) and not force:
+        return
+    out_dir = cfg.get("output_folder", "clips")
+    stamp = learn._load("learn_stamp.json", {})
+    now = time.time()
+    if force or now - stamp.get("stats", 0) > float(cfg.get("learn_every_hours", 6)) * 3600:
+        n = learn.fetch_stats(log)
+        metas = {}
+        import glob as _g
+        for mp in _g.glob(os.path.join(out_dir, "**", "meta.json"), recursive=True):
+            try:
+                with open(mp, encoding="utf-8") as f:
+                    metas[os.path.relpath(os.path.dirname(mp), out_dir).replace("\\", "/")] = json.load(f)
+            except Exception:
+                pass
+        res = learn.learn(metas)
+        stamp["stats"] = now
+        log(f"Learning: read {n} post stats, {res['measured_clips']} clips measured"
+            + ("" if res["ready"] else f" (needs {learn.MIN_CLIPS}+ to start adjusting)"))
+    if force or now - stamp.get("research", 0) > 24 * 3600:
+        names = set()
+        for job in build_jobs(cfg):
+            for ch in job["channels"]:
+                if ch.get("name"):
+                    names.add(ch["name"])
+        L = learn.learned()
+        L.setdefault("research", {})
+        for nm in sorted(names):
+            try:
+                r = research.scan(nm)
+                if r:
+                    L["research"][nm.lower()] = r
+                    log(f"Research: {nm} - top clips by other clippers average {r['top_median_seconds']}s; "
+                        f"hot words: {', '.join(r['hot_words'][:5]) or '-'}")
+            except Exception as e:
+                log(f"Research: couldn't scan {nm} ({short_err(e)})")
+        learn._save(learn.LEARNED, L)
+        stamp["research"] = now
+    learn._save("learn_stamp.json", stamp)

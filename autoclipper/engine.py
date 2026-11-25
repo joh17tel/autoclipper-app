@@ -83,6 +83,10 @@ class Engine:
             self.state = "working"
             self.last_check = datetime.now()
             try:
+                core.learning_cycle(cfg)   # every few hours: views of your posts + what other clippers post
+            except Exception as e:
+                self.log(f"learning skipped: {e}")
+            try:
                 jobs = core.build_jobs(cfg)
                 if not jobs:
                     self.log("No campaigns yet. Add one in the Campaigns tab.")

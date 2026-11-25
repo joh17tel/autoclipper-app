@@ -1,5 +1,17 @@
 # What's new
 
+## v6.5.0 — Self-learning
+- New 📈 Insights tab: AutoClipper now learns from results and adjusts itself
+- Paste the link after you post a clip (posting plan, or "Post links" on each clip). Every 6 hours it reads
+  the views, likes and comments of your TikTok/YouTube posts (Instagram: type views in by hand)
+- It compares your clips and learns what gets more views: hook type (quote / fan title / template),
+  individual hook lines, clip length, cold open on/off, viewer picks vs deep cuts, posting time
+- Once 8+ clips are measured, it applies what works: hook choice, clip length, cold open,
+  viewer-pick share. 25% of clips keep experimenting so it doesn't get stuck on early luck
+- Daily research: scans other clippers' YouTube clips of your streamers - how long the top ones are
+  (nudges your clip length) and which words their best titles use (counted as "hooky" in your quotes)
+- Settings: self-learning on/off, experiment share
+
 ## v6.4.0 — IRL streams + better hooks
 - Category per campaign: 🎮 Gaming, 🚶 IRL (e.g. JasonTheWeen), 🎙 Talk/podcast
   - picked automatically from the brief, or choose it in the campaign page / new campaign form
