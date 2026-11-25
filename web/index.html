@@ -145,11 +145,12 @@ nav button{width:auto}.navfoot,.brand{display:none}.tiles{grid-template-columns:
 <section id="insights" class="hidden">
   <h1>Insights</h1><p class="sub">AutoClipper learns from your own posts' views and from what other clippers post, then adjusts new clips.</p>
   <div class="panel row" style="justify-content:space-between"><div id="insStatus" class="meta">Loading…</div>
-    <button class="btn" id="bInsRefresh">↻ Check views &amp; research now</button></div>
+    <button class="btn" id="bInsRefresh">↻ Check views, research &amp; web now</button></div>
   <div class="panel"><h2>What it changed</h2><div id="insActions" class="meta"></div></div>
   <div class="panel"><h2>What gets more views (your posts)</h2>
     <p class="hint">1.30× = about 30% more views than your average clip. Small samples are kept close to 1.00× until there's enough data.</p>
     <div id="insFindings"></div></div>
+  <div class="panel"><h2>🔥 Trending now on the web (Reddit)</h2><div class="meta">Viral moments about your streamers on r/LivestreamFail and all of Reddit. 🎬 = has a clip link, so it gets clipped first with the post title as the hook idea.</div><div id="insWeb" class="meta" style="margin-top:8px"></div></div>
   <div class="panel"><h2>What other clippers post (YouTube)</h2><div id="insResearch" class="meta"></div></div>
 </section>
 
@@ -424,6 +425,11 @@ async function loadInsights(){try{const r=await api("/api/insights");const L=r.l
     <div style="margin-top:4px">Words in the best titles: ${(x.hot_words||[]).map(w=>`<span class="tag gray">${esc(w)}</span>`).join(" ")||"–"}</div>
     <details style="margin-top:6px"><summary>Top titles (for inspiration - don't copy)</summary><ul>${(x.top_titles||[]).map(t=>`<li>${esc(t.title)} <span class="meta">· ${t.views.toLocaleString()} views · ${t.seconds}s</span></li>`).join("")}</ul></details></div>`).join("")
     :"No scans yet. It scans each streamer once a day (or press the button above).";
+  const W=L.web||{};
+  $("#insWeb").innerHTML=Object.keys(W).length?Object.entries(W).map(([nm,x])=>`<div style="margin:10px 0 16px"><b>${esc(nm)}</b> <span class="meta">· ${x.posts} posts · checked ${esc((x.scanned||"").replace("T"," "))}</span>
+    <div style="margin-top:4px">Buzz words: ${(x.hot_words||[]).map(w=>`<span class="tag gray">${esc(w)}</span>`).join(" ")||"–"}</div>
+    <ul style="margin-top:6px">${(x.trending||[]).slice(0,8).map(t=>`<li>${t.clip_url?"🎬 ":""}<a href="${esc(t.permalink)}" target="_blank">${esc(t.title)}</a> <span class="meta">· ${t.score.toLocaleString()} upvotes · ${t.comments} comments</span></li>`).join("")}</ul></div>`).join("")
+    :"No web scan yet. It checks every 3 hours (or press the button above).";
 }catch(e){}}
 $("#bInsRefresh").onclick=async()=>{await post("/api/insights/refresh");toast("Checking… results appear in a minute",3000);setTimeout(loadInsights,60000)};
 
@@ -451,6 +457,9 @@ const FIELDS=[
  ["viewer_clip_share","select:0.25,0.5,0.75,1","Share of clips from viewer-made Twitch clips (rest = deeper cuts)"],
  ["self_learning","bool","Self-learning: adjust clips from your posts' views and other clippers' results"],
  ["explore_rate","select:0.1,0.25,0.4","Share of clips that keep experimenting (cold open on/off)"],
+ ["web_research","bool","Web research: watch Reddit for your streamers' viral moments and clip them first"],
+ ["web_research_hours","number","Check the web every (hours)"],
+ ["web_trending_clips_per_check","number","Trending moments to clip per streamer per check"],
  ["comment_question","bool","Add a question to captions to get comments"],
  ["use_viewer_clips","bool","Use viewer-made Twitch clips"],
  ["captions","bool","Auto-captions on videos"],["hook_on_video","bool","Title bar hook (first 3 seconds)"],

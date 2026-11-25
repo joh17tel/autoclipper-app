@@ -47,6 +47,9 @@ normalize_audio: true         # even out loudness to -14 LUFS (TikTok/Shorts sta
 self_learning: true           # learn from your posts' views + other clippers, and adjust new clips
 explore_rate: 0.25            # share of clips that keep experimenting (so it never gets stuck)
 learn_every_hours: 6          # how often to read your posts' views
+web_research: true            # watch Reddit (LivestreamFail + all) for your streamers' viral moments
+web_research_hours: 3         # how often to check the web
+web_trending_clips_per_check: 2   # trending moments to clip first, per streamer
 
 # ---- Posting ----
 comment_question: true        # add a question to captions ("Rate this play 1-10") to get comments

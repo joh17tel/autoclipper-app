@@ -18,7 +18,7 @@ from datetime import datetime
 
 import yaml
 
-from autoclipper import campaign, captions, copywriter, detect, gallery, layout, learn, render, research, sources
+from autoclipper import campaign, captions, copywriter, detect, gallery, layout, learn, render, research, sources, trends
 
 STATE = "state.json"
 
@@ -256,7 +256,8 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
         follow_x = layout.face_center_x(src)
         follow_x = 0.5 if follow_x is None else follow_x   # no face found: centre crop
     hist = copywriter.load_history()
-    hot = research.hot_words_for(streamer, learn.learned().get("research"))
+    hot = research.hot_words_for(streamer, learn.learned().get("research")) \
+        | trends.hot_words(learn.learned().get("web"), streamer)
     meta = copywriter.write_copy(streamer, words, peak_t, hashtags, seed=f"{cdir}",
                                  used=used_hooks, disclosure_tag=disc_tag, hook_hint=hook_hint,
                                  question=cfg.get("comment_question", True),
@@ -411,6 +412,55 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
     return made, len(clips)
 
 
+def clip_web_trending(cfg, ch, m_name, state, base, hashtags, disc):
+    """Clips of this streamer that are blowing up on Reddit right now = proven viral moments."""
+    from autoclipper import detect as _d
+    cname = ch.get("name") or m_name
+    items = trends.trending_clips(learn.learned().get("web"), cname)
+    fresh = [p for p in items if f"{m_name}:web:{p['permalink']}" not in state["done_vods"]]
+    limit = int(cfg.get("web_trending_clips_per_check", 2))
+    if not fresh or limit <= 0:
+        return 0
+    log(f"[{m_name}] {cname}: {len(fresh)} trending moments on the web - clipping the top {min(limit, len(fresh))}")
+    out = os.path.join(base, f"{datetime.now():%Y-%m-%d}_{safe(cname)}_trending")
+    os.makedirs(out, exist_ok=True)
+    made, used, cat = 0, set(), cfg.get("category", "gaming")
+    for i, p in enumerate(fresh[:limit], 1):
+        if should_stop():
+            break
+        key = f"{m_name}:web:{p['permalink']}"
+        cdir = os.path.join(out, f"clip_{i:02d}_{safe(p['title'])[:30]}")
+        os.makedirs(cdir, exist_ok=True)
+        raw = os.path.join(cdir, "raw.mp4")
+        try:
+            raw = sources.download_clip(p["clip_url"], raw)
+            dur = layout.probe_duration(raw)
+            if dur > 600:
+                raise RuntimeError("linked video is a full stream, not a clip")
+            fc = ch.get("facecam", "auto")
+            cam = resolve_facecam(fc if cat == "gaming" or isinstance(fc, list) else "none", raw)
+            energy = _d.audio_energy_per_second(raw)
+            peak = float(energy.argmax()) if len(energy) else dur * 0.7
+            target = cfg["clip_before_peak"] + cfg["clip_after_peak"]
+            ws = max(0.0, peak - cfg["clip_before_peak"]) if dur > target + 4 else 0.0
+            we = min(dur, peak + cfg["clip_after_peak"]) if dur > target + 4 else dur
+            meta = finish_clip(cfg, raw, cdir, cname, hashtags, ws, we, peak, cam, disc or {}, used,
+                               float(p.get("score") or 0),
+                               {"source": "web trending", "source_url": p["clip_url"], "thread": p["permalink"],
+                                "source_score": p.get("score"), "source_title": p.get("title")},
+                               hook_hint=p.get("title"), category=cat)
+            made += 1
+            _log_clip(i, meta, f"(trending on Reddit, {p.get('score')} upvotes) ")
+        except Exception as e:
+            log(f"   trending clip skipped: {short_err(e)}")
+        finally:
+            state["done_vods"].append(key)   # never retry the same thread
+            if os.path.exists(raw):
+                os.remove(raw)
+        save_state(state)
+    return made
+
+
 def build_jobs(cfg, include_disabled=False):
     """One job per campaign folder, plus config.yaml's own channels (if any)."""
     cfg = learn.apply_to_cfg(cfg)   # settings the learner is confident about
@@ -464,6 +514,12 @@ def run_job(job, state, out_dir, budget=1):
             m = dict(m)   # what's working for other clippers of this streamer
             m["max_clip_seconds"] = float(min(30, max(15, r["top_median_seconds"] + 3)))
         tags = campaign.campaign_tags(m, ch.get("hashtags", ""))
+        # 1a0) moments already going viral on the web (Reddit) - fastest proven wins
+        if m.get("web_research", True) and not ch.get("_web_done") \
+                and trends.trending_clips(learn.learned().get("web"), cname) and take():
+            ch["_web_done"] = True
+            if clip_web_trending(m, ch, jname, state, base, tags, disclosure_for(m, ch)):
+                gallery.build(out_dir)
         # 1a) Twitch: clips the streamer's viewers already made = human-picked best moments
         if m.get("use_viewer_clips", True) and sources.has_viewer_clips(ch["url"]) \
                 and not ch.get("_vclips_done") and take():
@@ -671,4 +727,22 @@ def learning_cycle(cfg, force=False):
                 log(f"Research: couldn't scan {nm} ({short_err(e)})")
         learn._save(learn.LEARNED, L)
         stamp["research"] = now
+    if cfg.get("web_research", True) and (force or now - stamp.get("web", 0) > float(cfg.get("web_research_hours", 3)) * 3600):
+        names = {ch["name"] for job in build_jobs(cfg) for ch in job["channels"] if ch.get("name")}
+        L = learn.learned()
+        L.setdefault("web", {})
+        for nm in sorted(names):
+            try:
+                r = trends.scan_streamer(nm)
+                if r:
+                    L["web"][nm.lower()] = r
+                    n_clips = sum(1 for p in r["trending"] if p.get("clip_url"))
+                    log(f"Web: {nm} - {r['posts']} trending posts, {n_clips} with clips; "
+                        f"buzz words: {', '.join(r['hot_words'][:5]) or '-'}")
+                else:
+                    log(f"Web: nothing trending about {nm} this week")
+            except Exception as e:
+                log(f"Web: couldn't scan {nm} ({short_err(e)})")
+        learn._save(learn.LEARNED, L)
+        stamp["web"] = now
     learn._save("learn_stamp.json", stamp)

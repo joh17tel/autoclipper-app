@@ -1,5 +1,12 @@
 # What's new
 
+## 6.6.0 - Web research (learns from what's going viral right now)
+- New: every 3 hours it checks Reddit (r/LivestreamFail + all of Reddit) for your streamers' most upvoted posts this week
+- Trending moments that link a Twitch/Kick/YouTube clip are clipped FIRST, with the post title as the hook idea (each one only once)
+- Buzz words from viral post titles help pick the most hooky quotes for captions
+- Insights tab: new "Trending now on the web" panel with links, upvotes and buzz words
+- Settings: web research on/off, how often, and how many trending moments per streamer
+
 ## v6.5.0 — Self-learning
 - New 📈 Insights tab: AutoClipper now learns from results and adjusts itself
 - Paste the link after you post a clip (posting plan, or "Post links" on each clip). Every 6 hours it reads
