@@ -119,11 +119,16 @@ def write_thumb_ass(path: str, hook: str, streamer: str, split: bool = False) ->
         f.write("\n".join(lines) + "\n")
 
 
-def _zoom_expr(peak: float | None) -> str:
-    """Punch-in zoom around the hype moment (eases in and out)."""
-    if peak is None:
-        return "1"
-    return f"(1+0.14*exp(-pow(t-{peak:.2f},2)/0.35))"
+def _zoom_expr(peak: float | None, beats: list | None = None) -> str:
+    """Punch-in zoom around the hype moment (eases in and out), plus a small jump-zoom on
+    each new phrase so the picture changes every few seconds (keeps eyes on screen)."""
+    parts = []
+    if peak is not None:
+        parts.append(f"(1+0.14*exp(-pow(t-{peak:.2f},2)/0.35))")
+    if beats:
+        steps = "+".join(f"gte(t,{b:.2f})" for b in beats[:14])
+        parts.append(f"(1+0.06*mod({steps},2))")
+    return "*".join(parts) if parts else "1"
 
 
 def _scale_zoom(out_w: int, out_h: int, z: str) -> str:
@@ -148,8 +153,8 @@ def _watermark(wm: dict | None) -> str:
 
 def build_filter(w: int, h: int, cam: tuple | None, peak: float | None,
                  ass_path: str | None, thumb: bool = False, wm: dict | None = None,
-                 follow_x: float | None = None) -> str:
-    z = "1" if thumb else _zoom_expr(peak)
+                 follow_x: float | None = None, beats: list | None = None) -> str:
+    z = "1" if thumb else _zoom_expr(peak, beats)
     pop = ",eq=contrast=1.12:saturation=1.3,unsharp=5:5:0.8" if thumb else ""
     if follow_x is not None and not cam and w / h > 0.75:
         # IRL / talk: fill the whole screen with the person (crop around their face)
@@ -185,12 +190,12 @@ def build_filter(w: int, h: int, cam: tuple | None, peak: float | None,
 
 def make_vertical(src: str, dst: str, ass_path: str | None = None,
                   cam: tuple | None = None, peak: float | None = None,
-                  wm: dict | None = None, follow_x: float | None = None) -> None:
+                  wm: dict | None = None, follow_x: float | None = None, beats: list | None = None) -> None:
     from .layout import probe_size
     w, h = probe_size(src)
     if wm and not os.path.exists(wm.get("file", "")):
         wm = None
-    vf = build_filter(w, h, cam, peak, ass_path, wm=wm, follow_x=follow_x)
+    vf = build_filter(w, h, cam, peak, ass_path, wm=wm, follow_x=follow_x, beats=beats)
     logo_in = ["-loop", "1", "-i", wm["file"]] if wm else []
     # gaming looks best at the source's 60fps; high quality, platform-friendly bitrate
     enc = (["-c:v", "h264_nvenc", "-preset", "p6", "-rc", "vbr", "-cq", "20",

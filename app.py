@@ -286,6 +286,33 @@ def insights_refresh():
     return jsonify({"ok": True})
 
 
+def post_priority(m, now=None):
+    """Which clip to post first. Trending moments die fast, so freshness counts most;
+    then how proven the moment is, then the clip's own self-check, minus rule problems."""
+    import math
+    from datetime import datetime
+    now = now or datetime.now()
+    try:
+        age_h = max(0.0, (now - datetime.fromisoformat(m.get("created", ""))).total_seconds() / 3600)
+    except Exception:
+        age_h = 24.0
+    src = m.get("source") or "auto-detected"
+    proven = {"web trending": 1.6, "viewer clip": 1.3}.get(src, 1.0)
+    if src == "web trending":
+        proven *= 1 + min(1.0, math.log10(1 + float(m.get("source_score") or 0)) / 4)
+    elif src == "viewer clip":
+        proven *= 1 + min(0.6, math.log10(1 + float(m.get("source_views") or 0)) / 6)
+    half_life = 18 if src == "web trending" else 36 if src == "viewer clip" else 60   # hours
+    fresh = 0.5 ** (age_h / half_life)
+    rscore = float((m.get("retention") or {}).get("score", 85)) / 100
+    fails = sum(1 for c in m.get("checks", []) if not c.get("ok") and not str(c.get("text", "")).startswith("Retention"))
+    p = round(100 * proven * fresh * (0.5 + 0.5 * rscore) * (0.7 ** fails), 1)
+    why = f"{src}, {age_h:.0f}h old, self-check {int(rscore * 100)}" + (f", {fails} rule issue(s)" if fails else "")
+    if age_h > 7 * 24:
+        return 0, why + " - too old, skip"
+    return p, why
+
+
 @app.get("/api/plan")
 def posting_plan():
     """Today's plan: best unposted clips, staggered per platform (Reels first, TikTok 2-3h later)."""
@@ -309,14 +336,11 @@ def posting_plan():
             continue
         m.update({"id": cid, "thumb": f"/media/{cid}/thumbnail.jpg", "video": f"/media/{cid}/clip.mp4",
                   "done": posted.get(cid) if isinstance(posted.get(cid), dict) else {}})
-        (viewer if m.get("source") == "viewer clip" else auto).append(m)
-    viewer.sort(key=lambda m: m.get("source_views") or 0, reverse=True)
-    auto.sort(key=lambda m: m.get("score") or 0, reverse=True)
-    picks = []
-    while (viewer or auto) and len(picks) < n:   # alternate viewer picks and deeper cuts
-        for group in (viewer, auto):
-            if group and len(picks) < n:
-                picks.append(group.pop(0))
+        m["priority"], m["why"] = post_priority(m)
+        if m["priority"] > 0:
+            auto.append(m)
+    auto.sort(key=lambda m: m["priority"], reverse=True)
+    picks = auto[:n]
     now = datetime.now()
     start = now.replace(hour=first_hour, minute=0, second=0, microsecond=0)
     day = "Today"
@@ -339,7 +363,7 @@ def posting_plan():
                           "done": bool(m["done"].get(plat))})
         plan.append({k: m.get(k) for k in ("id", "hook", "campaign", "thumb", "video", "youtube_title",
                                            "youtube_description", "tiktok_caption", "source", "source_views",
-                                           "length_sec")} | {"steps": steps})
+                                           "length_sec", "priority", "why")} | {"steps": steps})
     return jsonify({"day": day, "audience": audience, "plan": plan})
 
 

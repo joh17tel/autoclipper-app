@@ -1,5 +1,11 @@
 # What's new
 
+## 6.9.0 - Smarter posting order, faster pacing, no duplicates
+- Posting plan now ranks clips by how fresh, how proven (Reddit/viewer picks) and how clean they are, and shows why
+- Trending clips lose priority within a day; clips older than 7 days drop off the plan
+- Small jump-zoom on each new phrase so the picture changes every few seconds (Settings to turn off)
+- The same Twitch/Kick moment is never clipped twice from Reddit and viewer clips
+
 ## 6.8.0 - The system rewrites its own clip rules
 - Daily calibration: critiques its own recent clips, checks your views and the web, then nudges its rules one safe step
 - Tunes: payoff deadline, build-up, reaction length, dead-air cuts, max length, hook length, question-hook preference

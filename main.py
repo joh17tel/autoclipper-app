@@ -280,8 +280,10 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
     render.write_ass(words, ass, meta["hook"] if cfg.get("hook_on_video", True) else None,
                      split=bool(cam), disclosure=disc_text,
                      disclosure_seconds=float((disc or {}).get("seconds", 3)))
+    beats = phrase_beats(words, peak_t, src != trimmed) if cfg.get("punch_in_zooms", True) else None
     render.make_vertical(src, os.path.join(cdir, "clip.mp4"), ass, cam,
-                         peak_t if cfg.get("zoom_on_peak", True) else None, cfg.get("watermark"), follow_x)
+                         peak_t if cfg.get("zoom_on_peak", True) else None, cfg.get("watermark"), follow_x,
+                         beats=beats)
     tass = os.path.join(cdir, "thumb.ass")
     temps.append(tass)
     render.write_thumb_ass(tass, meta["hook"], streamer, split=bool(cam))
@@ -312,6 +314,29 @@ def finish_clip(cfg, raw, cdir, streamer, hashtags, want_s, want_e, peak, cam, d
         if os.path.exists(p):
             os.remove(p)
     return meta
+
+
+def phrase_beats(words, peak_t, cold_open, min_gap=2.5):
+    """Times to do a small jump-zoom: each new phrase, at least min_gap apart, not near the
+    peak zoom (which has its own punch-in)."""
+    beats, last = [], -min_gap
+    if cold_open:
+        last = 1.4          # the cold open is already a cut
+    for i, w in enumerate(words):
+        new_phrase = i == 0 or w["start"] - words[i - 1]["end"] > 0.45 or \
+            words[i - 1]["word"].rstrip().endswith((".", "!", "?", ","))
+        if new_phrase and w["start"] - last >= min_gap and abs(w["start"] - peak_t) > 1.5:
+            beats.append(round(w["start"], 2))
+            last = w["start"]
+    return beats
+
+
+def clip_slug(url):
+    """Same Twitch/Kick clip found via Reddit and via viewer clips -> same slug (no duplicates)."""
+    import re as _re
+    u = (url or "").split("?clip=")[-1] if "?clip=" in (url or "") else (url or "").split("?")[0]
+    m = _re.search(r"(?:clips\.twitch\.tv/|/clip/|/clips/)([\w-]+)", u) or _re.search(r"kick\.com/[\w-]+\?clip=([\w-]+)", url or "")
+    return (m.group(1) if m else u.rstrip("/").rsplit("/", 1)[-1]).lower() or None
 
 
 def retention_review(words, peak_t, length, cold_open, dead_removed, hook_text, max_payoff=10.0, max_tail=12.0):
@@ -402,8 +427,10 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
         log(f"[{m_name}] {ch.get('name')}: couldn't read viewer clips - {short_err(e)}")
         return 0, 0
     min_views = int(cfg.get("viewer_clips_min_views", 25))
+    seen = set(state.setdefault("clip_slugs", []))
     fresh = [c for c in clips if (c.get("view_count") or 0) >= min_views
-             and f"{m_name}:vclip:{c['id']}" not in state["done_vods"]]
+             and f"{m_name}:vclip:{c['id']}" not in state["done_vods"]
+             and clip_slug(c.get("url")) not in seen and str(c["id"]).lower() not in seen]
     # the #1-2 clips of the week are what every clipper posts; start a little deeper to stand out
     skip_top = int(cfg.get("skip_top_viewer_clips", 1))
     if len(fresh) > skip_top + 2:
@@ -448,6 +475,7 @@ def clip_viewer_clips(cfg, ch, m_name, state, base, hashtags, disc):
                                hook_hint=c.get("title"), category=cat)
             made += 1
             state["done_vods"].append(key)
+            state.setdefault("clip_slugs", []).append(clip_slug(c.get("url")) or str(c["id"]).lower())
             _log_clip(i, meta, f"(viewer clip, {c.get('view_count')} views) ")
         except Exception as e:
             log(f"   viewer clip failed: {short_err(e)}")
@@ -463,7 +491,9 @@ def clip_web_trending(cfg, ch, m_name, state, base, hashtags, disc):
     from autoclipper import detect as _d
     cname = ch.get("name") or m_name
     items = trends.trending_clips(learn.learned().get("web"), cname)
-    fresh = [p for p in items if f"{m_name}:web:{p['permalink']}" not in state["done_vods"]]
+    seen = set(state.setdefault("clip_slugs", []))
+    fresh = [p for p in items if f"{m_name}:web:{p['permalink']}" not in state["done_vods"]
+             and clip_slug(p["clip_url"]) not in seen]
     limit = int(cfg.get("web_trending_clips_per_check", 2))
     if not fresh or limit <= 0:
         return 0
@@ -496,6 +526,7 @@ def clip_web_trending(cfg, ch, m_name, state, base, hashtags, disc):
                                 "source_score": p.get("score"), "source_title": p.get("title")},
                                hook_hint=p.get("title"), category=cat)
             made += 1
+            state.setdefault("clip_slugs", []).append(clip_slug(p["clip_url"]))
             _log_clip(i, meta, f"(trending on Reddit, {p.get('score')} upvotes) ")
         except Exception as e:
             log(f"   trending clip skipped: {short_err(e)}")

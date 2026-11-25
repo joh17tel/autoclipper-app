@@ -242,7 +242,8 @@ async function loadPlan(){try{const p=await api("/api/plan");$("#planDay").textC
   $("#planList").innerHTML=p.plan.map((c,i)=>`<div class="row" style="align-items:flex-start;gap:12px;padding:10px 0;border-top:1px solid var(--line)" data-i="${i}">
     <img src="${c.thumb}" style="width:54px;aspect-ratio:9/16;object-fit:cover;border-radius:6px">
     <div style="flex:1;min-width:220px"><div class="hook" style="font-size:14px">${i+1}. ${esc(c.hook)}</div>
-      <div class="meta">${esc(c.campaign)} · ${esc(c.length_sec)}s${c.source==="viewer clip"?" · 👥 viewer pick":" · deep cut"}</div>
+      <div class="meta">${esc(c.campaign)} · ${esc(c.length_sec)}s${c.source==="web trending"?" · 🔥 trending":c.source==="viewer clip"?" · 👥 viewer pick":" · deep cut"}</div>
+      <div class="meta" title="why this order">priority ${esc(c.priority)} · ${esc(c.why||"")}</div>
       <div class="row" style="margin-top:6px"><a class="btn sm" href="${c.video}?dl=1">⬇ Video</a></div></div>
     <div style="display:flex;flex-direction:column;gap:6px">${c.steps.map(st=>`<label class="row" style="gap:8px;font-size:13px">
       <input type="checkbox" data-p="${st.platform}" ${st.done?"checked":""}> <b style="width:70px">${st.time}</b> ${PLAT[st.platform]||st.platform}
@@ -477,7 +478,7 @@ const FIELDS=[
  ["comment_question","bool","Add a question to captions to get comments"],
  ["use_viewer_clips","bool","Use viewer-made Twitch clips"],
  ["captions","bool","Auto-captions on videos"],["hook_on_video","bool","Title bar hook (first 3 seconds)"],
- ["cold_open","bool","Cold open (flash the payoff first)"],["zoom_on_peak","bool","Punch-in zoom on hype moment"],
+ ["cold_open","bool","Cold open (flash the payoff first)"],["zoom_on_peak","bool","Punch-in zoom on hype moment"],["punch_in_zooms","bool","Small jump-zoom on each new phrase (pacing)"],
  ["use_chat","bool","Use chat activity to find moments"],["cleanup_sources","bool","Delete downloaded stream audio after clipping"],
  ["auto_start_engine","bool","Start the engine automatically when the app opens"],
  ["phone_access","bool","Phone access over Wi-Fi (restart app after changing). Anyone on your Wi-Fi can open it"]];

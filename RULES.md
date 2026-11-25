@@ -27,6 +27,15 @@ then compares self-check scores and payoff timing against your real views (Insig
 - Hook text on screen for the first 3s; quotes from the clip beat templates; no repeats.
 - End on a finished sentence shortly after the reaction (5–9s), never mid-word.
 - Trending-on-Reddit moments are clipped first (web research).
+- Pacing: a small 6% jump-zoom on each new phrase (at least 2.5s apart, away from the peak zoom),
+  so the picture changes every few seconds.
+- Same moment never made twice: Reddit and viewer clips are matched by clip ID.
+
+## Posting order (Clips -> posting plan)
+priority = proven-ness x freshness x self-check x rule issues
+- Proven: trending on Reddit 1.6x (+ upvotes), viewer clip 1.3x (+ views), auto-detected 1.0x
+- Freshness half-life: trending 18h, viewer clip 36h, auto 60h. Over 7 days old = skipped
+- Each failed brief check (hashtag, disclosure) = x0.7
 
 ## Self-tuning (v6.8.0)
 Once a day the app runs research -> self-critique -> rule update on its own (`autoclipper/rules.py`):
@@ -49,6 +58,10 @@ Your own views win over web signals. Campaign briefs win over everything.
 | Question-hook preference | 1.0× | 0.6–1.6× |
 
 ## Changelog
+- 2026-11-25 (v6.9.0): Posting plan ranks by freshness + proof + self-check instead of alternating
+  sources (trending moments lose value within a day; old ranking mixed upvotes with detection scores).
+  Added phrase jump-zooms (2026 guides: visual change every 1-5s keeps retention). Cross-source dedupe
+  so the same Twitch/Kick clip isn't made twice.
 - 2026-11-25 (v6.8.0): The system now rewrites its own rules daily (self-critique + your views + web), bounded and logged.
 - 2026-11-25 (v6.7.0): Added self-check rubric (retention score + warnings per clip), payoff-by-10s rule
   when there's no cold open, 0.7s dead-air cut for IRL/talk. Why: 2026 research is consistent that the first
