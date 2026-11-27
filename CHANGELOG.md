@@ -1,5 +1,9 @@
 # What's new
 
+## 6.9.1 - Select many clips at once
+- Clips tab: "☑ Select" lets you tick many clips (or "Select all shown"), then Mark posted, Mark not posted, or Delete in one go
+- Tip: filter by campaign or "Posted" first, then "Select all shown" to clean up fast
+
 ## 6.9.0 - Smarter posting order, faster pacing, no duplicates
 - Posting plan now ranks clips by how fresh, how proven (Reddit/viewer picks) and how clean they are, and shows why
 - Trending clips lose priority within a day; clips older than 7 days drop off the plan

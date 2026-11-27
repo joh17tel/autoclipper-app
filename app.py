@@ -215,6 +215,38 @@ def mark_posted():
     return jsonify({"ok": True})
 
 
+@app.post("/api/clips/bulk")
+def clips_bulk():
+    """{ids:[...], action: posted | unposted | delete} for many clips at once."""
+    data = request.get_json(force=True)
+    ids, action = list(data.get("ids") or []), data.get("action")
+    if action not in ("posted", "unposted", "delete"):
+        return jsonify({"ok": False, "error": "unknown action"}), 400
+    done = 0
+    if action == "delete":
+        p = load_posted()
+        for cid in ids:
+            try:
+                d = inside(out_dir(), cid)
+            except Exception:
+                continue
+            if os.path.isfile(os.path.join(d, "meta.json")):
+                shutil.rmtree(d, ignore_errors=True)
+                p.pop(cid, None)
+                done += 1
+        save_posted(p)
+    else:
+        p = load_posted()
+        for cid in ids:
+            if action == "posted":
+                p[cid] = True
+            else:
+                p.pop(cid, None)
+            done += 1
+        save_posted(p)
+    return jsonify({"ok": True, "count": done})
+
+
 @app.post("/api/clips/link")
 def clip_link():
     """Save the link of a posted clip so AutoClipper can track its views and learn from it."""

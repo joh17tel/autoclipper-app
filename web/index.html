@@ -124,7 +124,17 @@ nav button{width:auto}.navfoot,.brand{display:none}.tiles{grid-template-columns:
     <select id="fCamp" style="width:auto"></select>
     <select id="fShow" style="width:auto"><option value="new">Not posted</option><option value="all">All</option><option value="posted">Posted</option></select>
     <button class="btn sm" id="bRefreshClips">↻ Refresh</button>
+    <button class="btn sm" id="bSelectMode">☑ Select</button>
     <span class="meta" id="clipCount"></span>
+  </div>
+  <div class="panel row hidden" id="bulkBar" style="position:sticky;top:0;z-index:5;gap:8px">
+    <b id="bulkCount">0 selected</b>
+    <button class="btn sm" id="bSelAll">Select all shown</button>
+    <button class="btn sm" id="bSelNone">Clear</button>
+    <span style="flex:1"></span>
+    <button class="btn sm green" data-bulk="posted">✓ Mark posted</button>
+    <button class="btn sm" data-bulk="unposted">↩ Mark not posted</button>
+    <button class="btn sm red" data-bulk="delete">🗑 Delete</button>
   </div>
   <div class="panel" id="planBox"><div class="row" style="justify-content:space-between"><h2 style="margin:0">📅 Posting plan <span class="meta" id="planDay"></span></h2>
     <span class="hint">Instagram first, TikTok 2½h later, YouTube after. Same clip close together on two apps gets pushed down.</span></div>
@@ -258,16 +268,33 @@ async function loadClips(quiet){if(!quiet)loadPlan();CLIPS=await api("/api/clips
   const sel=$("#fCamp"),cur=sel.value;sel.innerHTML='<option value="">All campaigns</option>'+camps.map(c=>`<option>${esc(c)}</option>`).join("");
   sel.value=camps.includes(cur)?cur:"";renderClips()}
 $("#fCamp").onchange=renderClips;$("#fShow").onchange=renderClips;$("#bRefreshClips").onclick=()=>loadClips();
+let SELECTING=false,SEL=new Set(),SHOWN=[];
+function updBulk(){$("#bulkBar").classList.toggle("hidden",!SELECTING);$("#bulkCount").textContent=SEL.size+" selected";
+  $("#bSelectMode").textContent=SELECTING?"✕ Done selecting":"☑ Select";
+  $$("#clipGrid .card").forEach(cd=>{const id=SHOWN[+cd.dataset.i]?.id;cd.style.outline=SEL.has(id)?"3px solid var(--acc)":"";
+    const cb=cd.querySelector("input.selbox");if(cb)cb.checked=SEL.has(id)})}
+$("#bSelectMode").onclick=()=>{SELECTING=!SELECTING;if(!SELECTING)SEL.clear();renderClips()};
+$("#bSelAll").onclick=()=>{SHOWN.forEach(c=>SEL.add(c.id));updBulk()};
+$("#bSelNone").onclick=()=>{SEL.clear();updBulk()};
+$$("[data-bulk]").forEach(b=>b.onclick=async()=>{const act=b.dataset.bulk,ids=[...SEL];
+  if(!ids.length)return toast("Select some clips first");
+  if(act==="delete"&&!confirm(`Delete ${ids.length} clip${ids.length>1?"s":""} from your PC? This can't be undone.`))return;
+  const r=await post("/api/clips/bulk",{ids,action:act});
+  if(act==="delete")CLIPS=CLIPS.filter(c=>!SEL.has(c.id));else CLIPS.forEach(c=>{if(SEL.has(c.id))c.posted=act==="posted"});
+  toast(`${r.count} clip${r.count===1?"":"s"} ${act==="delete"?"deleted":act==="posted"?"marked posted":"marked not posted"}`);
+  SEL.clear();renderClips();status();loadPlan()});
 function renderClips(){const camp=$("#fCamp").value,showMode=$("#fShow").value;
   const list=CLIPS.filter(c=>(!camp||(c.campaign||"General")===camp)&&(showMode==="all"||(showMode==="posted")===c.posted));
+  SHOWN=list;[...SEL].forEach(id=>{if(!CLIPS.find(c=>c.id===id))SEL.delete(id)});
   $("#clipCount").textContent=list.length+" clip"+(list.length===1?"":"s");
-  if(!list.length){$("#clipGrid").innerHTML=`<div class="empty" style="grid-column:1/-1">No clips here yet. They appear automatically once the engine finds new streams.</div>`;return}
+  if(!list.length){$("#clipGrid").innerHTML=`<div class="empty" style="grid-column:1/-1">No clips here yet. They appear automatically once the engine finds new streams.</div>`;updBulk();return}
   $("#clipGrid").innerHTML=list.map((c,i)=>{const plats=c.platforms||["tiktok","youtube"];
     const yt=plats.includes("youtube"),tt=plats.includes("tiktok")||plats.includes("instagram");
     const checks=(c.checks||[]).map(k=>`<div class="chk ${k.ok?"ok":"bad"}">${k.ok?"✓":"✗ FIX:"} ${esc(k.text)}</div>`).join("");
     const rules=(c.manual_rules||[]).length?`<details><summary>Brief rules to check (${c.manual_rules.length})</summary><ul>${c.manual_rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul></details>`:"";
     const disc=c.disclosure?`<div class="chk" style="color:var(--acc)">⚠ Turn on ${tt?"TikTok “Paid partnership”":""}${tt&&yt?" / ":""}${yt?"YouTube “Paid promotion”":""} when posting</div>`:"";
     return `<div class="card ${c.posted?"posted":""}" data-i="${i}">
+      ${SELECTING?`<label class="row" style="gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" class="selbox" style="width:20px;height:20px"> Select</label>`:""}
       <div class="row"><span class="tag">${esc(c.campaign||"General")}</span><span class="tag gray">${esc({gaming:"🎮",irl:"🚶",talk:"🎙"}[c.category]||"")} ${esc(c.layout||"")}</span><span class="tag gray">${esc(c.length_sec)}s</span>${c.source==="viewer clip"?`<span class="tag" style="background:#4ad07a">👥 viewer pick · ${esc(c.source_views)} views</span>`:""}</div>
       <div class="media"><video src="${c.video}" controls preload="metadata" poster="${c.thumb}"></video><img src="${c.thumb}" loading="lazy"></div>
       <div class="hook">${esc(c.hook)}</div>
@@ -283,7 +310,12 @@ function renderClips(){const camp=$("#fCamp").value,showMode=$("#fShow").value;
       <div class="row" style="justify-content:space-between;margin-top:4px">
         <button class="btn sm ${c.posted?"":"green"}" data-a="posted">${c.posted?"↩ Mark not posted":"✓ Mark posted"}</button>
         <button class="btn sm red" data-a="del">Delete</button></div></div>`}).join("");
+  updBulk();
   $$("#clipGrid .card").forEach(card=>{const c=list[+card.dataset.i];
+    const cb=card.querySelector("input.selbox");
+    if(cb)cb.onchange=()=>{cb.checked?SEL.add(c.id):SEL.delete(c.id);updBulk()};
+    if(SELECTING)card.onclick=e=>{if(e.target.closest("button,a,input,video,details,summary,label"))return;
+      SEL.has(c.id)?SEL.delete(c.id):SEL.add(c.id);updBulk()};
     card.querySelectorAll("input[data-l]").forEach(inp=>inp.onchange=async()=>{if(!inp.value.trim())return;
       try{await post("/api/clips/link",{id:c.id,platform:inp.dataset.l,url:inp.value});toast("Link saved");status()}catch(e){}});
     card.querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{
